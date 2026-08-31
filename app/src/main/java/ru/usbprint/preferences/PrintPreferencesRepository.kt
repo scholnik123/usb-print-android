@@ -26,6 +26,9 @@ import ru.usbprint.domain.model.PrintQuality
 import ru.usbprint.domain.model.PrinterResolution
 import ru.usbprint.domain.model.PrintSettings
 import ru.usbprint.domain.model.ScalingMode
+import ru.usbprint.domain.model.VerifiedPrinterProfile
+import ru.usbprint.domain.model.VerifiedPrinterProfileFactory
+import ru.usbprint.printing.PrintingEncoderVersions
 import java.net.URLDecoder
 import java.net.URLEncoder
 import java.security.MessageDigest
@@ -64,12 +67,27 @@ class PrintPreferencesRepository(private val context: Context) {
         }
     }
 
+    suspend fun verifiedProfileFor(deviceKey: String): VerifiedPrinterProfile? {
+        val key = stringPreferencesKey(PROFILE_PREFIX + deviceHash(deviceKey))
+        val stored = context.printPreferencesDataStore.data.first()[key]?.let(VerifiedPrinterProfileCodec::decode) ?: return null
+        val checked = VerifiedPrinterProfileFactory.revalidate(stored, PrintingEncoderVersions.current)
+        if (checked != stored) context.printPreferencesDataStore.edit { it[key] = VerifiedPrinterProfileCodec.encode(checked) }
+        return checked
+    }
+
+    suspend fun saveVerifiedProfile(deviceKey: String, profile: VerifiedPrinterProfile) {
+        context.printPreferencesDataStore.edit {
+            it[stringPreferencesKey(PROFILE_PREFIX + deviceHash(deviceKey))] = VerifiedPrinterProfileCodec.encode(profile)
+        }
+    }
+
     private fun deviceHash(value: String): String = MessageDigest.getInstance("SHA-256").digest(value.toByteArray()).joinToString("") { "%02x".format(it) }.take(16)
 
     private companion object {
         val ADVANCED_MODE = booleanPreferencesKey("advanced_mode")
         const val PRESET_PREFIX = "preset_"
         const val OVERRIDE_PREFIX = "override_"
+        const val PROFILE_PREFIX = "verified_profile_"
     }
 }
 

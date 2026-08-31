@@ -37,7 +37,7 @@ The first public APK is debug-signed and intended for direct installation and te
 - PDF Direct, PWG Raster, PostScript Raster, PCL 5 Raster, ESC/POS, and raw printer-language passthrough
 - PDF, image, and UTF-8 text rendering
 - Foreground print jobs with notification cancellation
-- Local presets, printer-specific experimental overrides, calibration-page result wizard, and redacted diagnostics export
+- Local presets, printer-specific experimental overrides, calibration-page result wizard, versioned local printer profiles, and redacted diagnostics export
 - No cloud, account, advertising, analytics, Firebase, or INTERNET permission
 
 ## IPP-over-USB
@@ -156,6 +156,8 @@ Requirements:
 
 When the development build sends the built-in A4 hardware-test page, it asks what the user physically observed. The choices distinguish a correct page, a page with classified defects, an accepted job with no page, a printer error, no visible action, a lost connection, and another described result. Dismissing the dialog keeps an explicit “evaluate result” action available. A transport or IPP success never chooses an answer for the user.
 
+After an explicit answer, the development build stores a local versioned profile with app/encoder versions, printer model and VID/PID, a SHA-256 device identifier instead of a raw serial, reported languages/formats, tested settings, result date, and up to 20 historical observations. An encoder-version change preserves the history but changes the status to `NEEDS_REVALIDATION`. No profile is created from USB or IPP status alone.
+
 ## Privacy
 
 - No account, analytics, Firebase, advertising, or cloud upload
@@ -190,7 +192,7 @@ The APK is generated at `app/build/outputs/apk/debug/app-debug.apk`.
 
 ## Validation
 
-The first public release passes 61 JVM tests covering IPP wire format and malformed input, HTTP framing, capability mapping, USB discovery, PWG/PCL/PostScript invariants, page planning, and raster memory calculations. The development branch passes 86 JVM tests after adding exact-length IPP PWG coverage and the hardware-test observation model/job-state tracker.
+The first public release passes 61 JVM tests covering IPP wire format and malformed input, HTTP framing, capability mapping, USB discovery, PWG/PCL/PostScript invariants, page planning, and raster memory calculations. The development branch passes 95 JVM tests after adding exact-length IPP PWG coverage, the hardware-test workflow, profile history/identity rules, encoder revalidation, and profile-codec round trips.
 
 Internal golden/invariant tests are not equivalent to external validation through CUPS, Ghostscript, or ipptool, and they are not a substitute for physical printer testing. See [VALIDATION_REPORT.md](VALIDATION_REPORT.md) and [docs/TESTING.md](docs/TESTING.md).
 
@@ -203,7 +205,7 @@ Internal golden/invariant tests are not equivalent to external validation throug
 - PCLm, PCL XL/PCL6, URF, and vendor-specific protocols are not implemented.
 - N-up is not implemented.
 - IPP custom-paper ranges may be detected, but custom-size UI and job encoding are incomplete.
-- Hardware-test observations are session state until versioned verified-profile persistence is implemented.
+- Privacy-safe compatibility JSON export is not implemented yet; locally stored profile notes are not exported automatically.
 - Office formats require conversion to PDF.
 - The release APK is debug-signed, not production-signed.
 
@@ -217,7 +219,7 @@ See [COMPATIBILITY.md](COMPATIBILITY.md) for evidence levels and the reporting t
 
 - Physical printer validation and evidence-backed compatibility reports
 - Physical-printer validation of the development IPP PWG Raster path
-- Hardware-test confirmation and versioned printer profiles
+- Privacy-safe compatibility record export and profile review UI
 - N-up composition
 - Complete custom-paper workflow
 - PCLm and expanded standards-based compatibility

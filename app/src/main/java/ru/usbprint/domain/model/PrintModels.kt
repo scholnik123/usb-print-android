@@ -147,7 +147,8 @@ enum class AppError(val userMessage: String) {
     IPP_JOB_REJECTED("Принтер отклонил задание IPP."),
     IPP_DOCUMENT_FORMAT_NOT_SUPPORTED("Принтер не поддерживает формат документа для IPP."),
     IPP_ATTRIBUTE_NOT_SUPPORTED("Принтер не поддерживает один из параметров IPP-задания."),
-    IPP_JOB_CANCEL_FAILED("Не удалось отменить IPP-задание на принтере.")
+    IPP_JOB_CANCEL_FAILED("Не удалось отменить IPP-задание на принтере."),
+    PROFILE_SAVE_ERROR("Не удалось сохранить локальный профиль проверки принтера.")
 }
 
 class PrintException(val error: AppError, cause: Throwable? = null) : Exception(error.userMessage, cause)

@@ -27,7 +27,7 @@ IPP attributes ──┘                 │
 | `IPP` | 4 | Реальный `Get-Printer-Attributes` через IPP-over-USB |
 | `IEEE1284` | 3 | Device ID, CMD и производные языки печати |
 | `USB_DESCRIPTOR` | 2 | Interface class/subclass/protocol и endpoints |
-| `KNOWN_PROFILE` | 1 | Тип зарезервирован; verified profile persistence ещё не завершён |
+| `KNOWN_PROFILE` | 1 | Versioned hardware-test profiles сохраняются локально; automatic capability promotion намеренно ещё не включён |
 | `BACKEND_DEFAULT` | 0 | Явно подписанный безопасный fallback только для legacy raster backend |
 
 Confidence: `CONFIRMED`, `DERIVED`, `DEFAULT`, `EXPERIMENTAL`. Значение IPP получает `IPP/CONFIRMED` только если соответствующий attribute действительно присутствовал в response. Отсутствующий attribute не создаётся автоматически.
@@ -138,5 +138,5 @@ Hidden stale IPP keyword очищается при сохранении наст
 - UI ввода custom width/height, несмотря на готовое confirmed range mapping;
 - software N-up 2/4;
 - PCLm;
-- verified hardware profile storage/automatic confidence promotion;
+- automatic promotion of stored hardware evidence into selectable printer capabilities;
 - per-value provenance внутри одного mixed set (например, `AUTO` и confirmed orientations).

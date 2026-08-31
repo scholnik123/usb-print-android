@@ -54,7 +54,7 @@ IEEE-1284 parsing is isolated in `protocols/`. PWG Raster, PostScript, PCL 5, an
 
 ### Persistence
 
-`preferences/` stores local presets, advanced-mode state, and printer-specific experimental overrides in Jetpack DataStore. Document contents and URIs are not persisted in printer preferences.
+`preferences/` stores local presets, advanced-mode state, printer-specific experimental overrides, and versioned hardware-test profiles in Jetpack DataStore. A profile retains bounded result history and a SHA-256 device identifier, never a raw serial or Android device key. Document contents and URIs are not persisted in printer preferences.
 
 ### Diagnostics
 

@@ -29,8 +29,11 @@ import ru.usbprint.domain.model.PrintException
 import ru.usbprint.domain.model.PrintJob
 import ru.usbprint.domain.model.PrintJobStatus
 import ru.usbprint.domain.model.PrintSettings
+import ru.usbprint.domain.model.VerifiedPrinterProfile
+import ru.usbprint.domain.model.VerifiedPrinterProfileFactory
 import ru.usbprint.preferences.SavedPrintPreset
 import ru.usbprint.printing.PrintForegroundService
+import ru.usbprint.printing.PrintingEncoderVersions
 import ru.usbprint.usb.UsbPrinterState
 
 data class MainUiState(
@@ -51,7 +54,8 @@ data class MainUiState(
     val isHardwareTestDocument: Boolean = false,
     val hardwareTestAwaitingResult: Boolean = false,
     val showHardwareTestWizard: Boolean = false,
-    val lastHardwareTestObservation: HardwareTestObservation? = null
+    val lastHardwareTestObservation: HardwareTestObservation? = null,
+    val verifiedPrinterProfile: VerifiedPrinterProfile? = null
 )
 
 class MainViewModel(private val container: AppContainer) : ViewModel() {
@@ -59,13 +63,22 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
     val state = _state.asStateFlow()
     val logs = container.log.entries
     private val hardwareTestJobs = HardwareTestJobTracker()
+    private var pendingHardwareTestJob: PrintJob? = null
 
     init {
         container.printerController.start()
         viewModelScope.launch {
             container.printerController.state.collectLatest { usb ->
-                _state.update { current -> refreshed(current.copy(usb = usb, error = null)) }
-                (usb as? UsbPrinterState.Ready)?.printer?.let { printer -> loadOverride(printer.deviceKey) }
+                _state.update { current ->
+                    val oldKey = (current.usb as? UsbPrinterState.Ready)?.printer?.deviceKey
+                    val newKey = (usb as? UsbPrinterState.Ready)?.printer?.deviceKey
+                    refreshed(current.copy(
+                        usb = usb,
+                        error = null,
+                        verifiedPrinterProfile = current.verifiedPrinterProfile.takeIf { oldKey == newKey }
+                    ))
+                }
+                (usb as? UsbPrinterState.Ready)?.printer?.let { printer -> loadPrinterLocalState(printer.deviceKey) }
             }
         }
         viewModelScope.launch { container.preferences.advancedMode.collectLatest { enabled -> _state.update { it.copy(advancedMode = enabled) } } }
@@ -73,6 +86,9 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
         viewModelScope.launch {
             container.printExecutor.state.collectLatest { execution ->
                 val shouldRequestObservation = hardwareTestJobs.onExecution(execution.jobId, execution.status)
+                if (execution.jobId == pendingHardwareTestJob?.id && execution.status == PrintJobStatus.CANCELLED) {
+                    pendingHardwareTestJob = null
+                }
                 _state.update { current ->
                     current.copy(
                         jobStatus = execution.status,
@@ -159,7 +175,10 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
             return
         }
         val job = PrintJob(document = document, printer = printer, settings = current.settings, backend = current.backend.selected)
-        if (current.isHardwareTestDocument) hardwareTestJobs.started(job.id)
+        if (current.isHardwareTestDocument) {
+            hardwareTestJobs.started(job.id)
+            pendingHardwareTestJob = job
+        }
         if (PrintForegroundService.start(container.appContext, job)) {
             _state.update {
                 it.copy(
@@ -173,6 +192,7 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
             }
         } else {
             hardwareTestJobs.startFailed(job.id)
+            if (pendingHardwareTestJob?.id == job.id) pendingHardwareTestJob = null
             _state.update { it.copy(error = AppError.TRANSFER_ERROR) }
         }
     }
@@ -181,20 +201,47 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
     fun openHardwareTestWizard() = _state.update { if (it.hardwareTestAwaitingResult) it.copy(showHardwareTestWizard = true) else it }
     fun dismissHardwareTestWizard() = _state.update { it.copy(showHardwareTestWizard = false) }
     fun recordHardwareTestObservation(outcome: HardwareTestOutcome, issues: Set<HardwarePrintIssue>, notes: String?) {
+        val job = pendingHardwareTestJob ?: run {
+            _state.update { state -> state.copy(error = AppError.INVALID_SETTINGS) }
+            return
+        }
         val observation = runCatching {
             HardwareTestObservation(outcome, issues, notes?.trim()?.takeIf(String::isNotEmpty))
         }.getOrElse {
             _state.update { state -> state.copy(error = AppError.INVALID_SETTINGS) }
             return
         }
-        container.log.add("Hardware test observation recorded: ${outcome.name}; issues=${issues.joinToString { it.name }}")
-        _state.update {
-            it.copy(
-                hardwareTestAwaitingResult = false,
-                showHardwareTestWizard = false,
-                lastHardwareTestObservation = observation,
-                error = null
-            )
+        _state.update { it.copy(showHardwareTestWizard = false) }
+        viewModelScope.launch {
+            runCatching {
+                val encoderVersion = checkNotNull(PrintingEncoderVersions.forBackend(job.backend))
+                val existing = container.preferences.verifiedProfileFor(job.printer.deviceKey)
+                VerifiedPrinterProfileFactory.record(
+                    existing = existing,
+                    printer = job.printer.capabilities,
+                    deviceKey = job.printer.deviceKey,
+                    appVersion = ru.usbprint.BuildConfig.VERSION_NAME,
+                    backend = job.backend,
+                    encoderVersion = encoderVersion,
+                    settings = job.settings,
+                    observation = observation
+                ).also { container.preferences.saveVerifiedProfile(job.printer.deviceKey, it) }
+            }.onSuccess { profile ->
+                pendingHardwareTestJob = null
+                container.log.add("Hardware test observation recorded: ${outcome.name}; profile=${profile.status.name}")
+                _state.update {
+                    val currentKey = (it.usb as? UsbPrinterState.Ready)?.printer?.deviceKey
+                    it.copy(
+                        hardwareTestAwaitingResult = false,
+                        lastHardwareTestObservation = observation,
+                        verifiedPrinterProfile = profile.takeIf { currentKey == job.printer.deviceKey } ?: it.verifiedPrinterProfile,
+                        error = null
+                    )
+                }
+            }.onFailure {
+                container.log.add("Hardware profile save failed: ${it.javaClass.simpleName}")
+                _state.update { state -> state.copy(hardwareTestAwaitingResult = true, error = AppError.PROFILE_SAVE_ERROR) }
+            }
         }
     }
     fun clearError() = _state.update { it.copy(error = null) }
@@ -259,11 +306,12 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
-    private fun loadOverride(deviceKey: String) = viewModelScope.launch {
+    private fun loadPrinterLocalState(deviceKey: String) = viewModelScope.launch {
         val override = container.preferences.overrideFor(deviceKey)
+        val profile = container.preferences.verifiedProfileFor(deviceKey)
         _state.update { current ->
             val currentKey = (current.usb as? UsbPrinterState.Ready)?.printer?.deviceKey
-            if (currentKey == deviceKey) refreshed(current.copy(printerOverride = override)) else current
+            if (currentKey == deviceKey) refreshed(current.copy(printerOverride = override, verifiedPrinterProfile = profile)) else current
         }
     }
 

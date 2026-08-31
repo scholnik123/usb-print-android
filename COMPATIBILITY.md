@@ -23,7 +23,9 @@ The development IPP PWG backend is covered by deterministic tests but has not be
 
 The development hardware-test wizard records only an explicit physical observation. It offers: printed correctly, printed with issues, accepted with no page, printer error, nothing happened, connection lost, or other. “Printed with issues” can classify crop, paper, orientation, color, grayscale, blank/garbage output, extra pages, scale, margins, and duplex defects. `SENT`, bulk-transfer success, or IPP completed never selects a successful outcome.
 
-Wizard observations are currently session state. Versioned persistent profiles, revalidation rules, and privacy-safe JSON compatibility export are separate upcoming stages, so the table remains empty.
+After an explicit wizard answer, the development build stores a versioned local profile. It includes app/encoder versions, model and VID/PID, a SHA-256 identifier instead of raw serial/device key, reported languages/IPP formats, tested paper/resolution/color/duplex/backend, result date, and at most 20 historical observations. If a corresponding encoder version or schema changes, the previous evidence is retained and the status becomes `NEEDS_REVALIDATION`.
+
+Local profile persistence does not publish a compatibility claim and does not populate this repository table. Privacy-safe JSON export and explicit user submission remain separate steps, so the table remains empty until a real result is reviewed and submitted.
 
 | Manufacturer | Model | VID:PID | Protocol | Reported formats | Backend | Paper | Resolution | Color | Duplex | Result | App version |
 |---|---|---|---|---|---|---|---|---|---|---|---|

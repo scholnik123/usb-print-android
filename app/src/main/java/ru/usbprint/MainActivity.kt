@@ -152,6 +152,9 @@ private fun UsbPrintScreen(viewModel: MainViewModel, onSelect: () -> Unit, onExp
             state.lastHardwareTestObservation?.let { observation ->
                 Text("Последняя оценка теста: ${observation.outcome.label}", style = MaterialTheme.typography.bodySmall)
             }
+            state.verifiedPrinterProfile?.let { profile ->
+                Text("Профиль совместимости: ${profile.status.label} · ${profile.history.size} набл.", style = MaterialTheme.typography.bodySmall)
+            }
             Spacer(Modifier.height(10.dp))
         }
     }
