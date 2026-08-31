@@ -14,6 +14,8 @@ flowchart TB
     REGISTRY --> PRINT[Printing backends]
     PRINT --> IPP[IPP protocol package]
     PRINT --> PROTOCOLS[PWG / PostScript / PCL5 / ESC-POS]
+    PROTOCOLS --> SPOOL[Bounded app-cache spool]
+    SPOOL --> IPP
     PRINT --> USB[USB transport]
     IPP --> USB
     USB --> PRINTER[USB printer]
@@ -103,16 +105,25 @@ sequenceDiagram
     Android->>IPP: HTTP/1.1 POST + Get-Printer-Attributes
     IPP-->>Android: Bounded HTTP/IPP response
     Android->>Android: Map reported capabilities and validate settings
-    Android->>IPP: HTTP/1.1 POST + IPP Print-Job + PDF
+    alt Safe direct PDF
+        Android->>IPP: HTTP/1.1 POST + IPP Print-Job + PDF
+    else Software layout through PWG
+        Android->>Android: Render physical pages to bounded app-cache PWG spool
+        Android->>Android: Read exact spool length
+        Android->>IPP: HTTP/1.1 POST + IPP Print-Job + image/pwg-raster
+        Android->>Android: Delete spool on success/error/cancel
+    end
     IPP-->>Android: job-id / job-uri when available
     Android->>IPP: Get-Job-Attributes or Cancel-Job when reported
 ```
 
-IPP-over-USB requires USB bulk IN/OUT interfaces and does not require Wi-Fi or the Android `INTERNET` permission. The current print path supports direct PDF; IPP PWG and Create-Job + Send-Document remain future work.
+IPP-over-USB requires USB bulk IN/OUT interfaces and does not require Wi-Fi or the Android `INTERNET` permission. The development path supports direct PDF and exact-length IPP PWG Print-Job. Create-Job + Send-Document remains future work.
 
 ## Memory model
 
 Target raster data is streamed row by row. `RasterPageSource` keeps a bounded source bitmap and one output row rather than a full multi-page target job. Checked `Long` arithmetic and explicit dimension/pixel limits reject unsafe layouts before allocation.
+
+IPP PWG additionally uses disk-backed spooling because HTTP requires Content-Length before transmission. The spool is unique, app-private, limited to 512 MiB, never loaded as one byte array, and removed deterministically after the request. Startup cleanup covers process death between creation and normal close.
 
 ## Extension rules
 

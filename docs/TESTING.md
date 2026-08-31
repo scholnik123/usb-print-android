@@ -20,7 +20,7 @@ Windows:
 .\gradlew.bat assembleDebug
 ```
 
-The first public release baseline is 61 JVM tests. The number is not a target by itself; wire boundaries, protocol selection, and overflow behavior are the important coverage.
+The first public release baseline is 61 JVM tests. The development branch baseline after IPP PWG integration is 79 JVM tests. The number is not a target by itself; wire boundaries, protocol selection, cleanup, and overflow behavior are the important coverage.
 
 ## JVM and unit tests
 
@@ -44,10 +44,15 @@ The unit suite covers:
 - Capability mapping, media-col, micrometre conversion, raw media keywords, and asymmetric resolution
 - Print-Job attributes and document length
 - Prevention of legacy raw fallback on an IPP-only interface
+- IPP PWG selection only for Print-Job, exact MIME, supported raster type, and supported resolution
+- Exact combined HTTP Content-Length and exact IPP-plus-document bytes
+- Bounded unique app-cache spool creation, maximum size, close cleanup, and startup cleanup
+- IPP PWG MIME, payload bytes, copies/range non-duplication, cancellation before generation and during upload
+- Cleanup after HTTP failure and IPP rejection, with one exchange and no retry after transmission begins
 
 ## Golden and invariant tests
 
-PWG Raster uses a test-only inspector that parses complete generated streams. Fixtures check the sync word, full header, line encoding, page height, media, color, duplex, and multi-page boundaries.
+PWG Raster uses a test-only inspector that parses complete generated streams. Fixtures check the sync word, full header, line encoding, page height, media, orientation, 300/600 DPI, color/grayscale/mono, duplex, and multi-page boundaries. Producer tests compare exact complete bytes, preserve multi-page order, and verify cancellation before the first byte. Job-planner tests verify software page range and copies without IPP duplication.
 
 PCL 5 tests parse the exact emitted subset: reset, media, orientation, resolution, duplex, row payload boundaries, raster end, and form feed.
 
@@ -67,7 +72,7 @@ Future connected coverage should include Activity startup/recreation, settings r
 
 ## Hardware tests
 
-Hardware-tested printers for 1.0.0: **0**.
+Hardware-tested printers for 1.0.0 and the current development branch: **0**.
 
 Do not treat any of the following as a visually confirmed print:
 
@@ -82,7 +87,7 @@ A hardware result requires the exact printer model, Android/OTG environment, bac
 
 ## External reference validation
 
-Not run for 1.0.0. CUPS/cupsfilter, Ghostscript, and ipptool were unavailable in the release environment. No external validation badge or claim is made.
+Not run for 1.0.0 or the current development IPP PWG path. CUPS/cupsfilter, Ghostscript, and ipptool were unavailable in the development environment. No external validation badge or claim is made.
 
 ## CI
 

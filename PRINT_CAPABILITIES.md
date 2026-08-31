@@ -66,6 +66,8 @@ VID/PID не используется как доказательство IPP. �
 - `media-col` margins (hundredths of millimetre) → `HardwareMarginsMm`;
 - rangeOfInteger `x-dimension/y-dimension` → `CustomPaperRangeMicrons` с явным conversion `hundredths mm × 10 = microns`;
 - `printer-resolution-supported` → `PrinterResolution(xDpi,yDpi)`, включая 600×1200;
+- `pwg-raster-document-resolution-supported` → подтверждённые PWG Raster resolutions;
+- `pwg-raster-document-type-supported` → точные raster encodings; текущий encoder принимает только `black_1`, `sgray_8` и `srgb_8`;
 - `print-color-mode-supported`/`color-supported` → подтверждённые color modes;
 - `sides-supported` → simplex/long-edge/short-edge;
 - `copies-supported` → подтверждённый диапазон;
@@ -98,20 +100,40 @@ Operation attributes (charset, natural language, printer URI, user/job name, doc
 
 Если response содержит `job-id`/`job-uri` и operations подтверждают `Get-Job-Attributes`, приложение читает `job-state`, reasons, impressions и sheets completed во время короткого bounded polling. При запросе пользователя и подтверждённой операции `Cancel-Job` отправляется cancel. Без IPP остаётся честный legacy статус «Задание передано принтеру».
 
+## IPP PWG effective settings
+
+IPP PWG доступен в development branch только при одновременно подтверждённых условиях:
+
+- найден корректный IPP-over-USB interface;
+- `printer-is-accepting-jobs` не равен false;
+- `Print-Job` присутствует в `operations-supported`;
+- `image/pwg-raster` присутствует в `document-format-supported`;
+- документ относится к PDF, image или UTF-8 text;
+- пересечение reported resolution с encoder subset содержит symmetric 300 или 600 DPI;
+- reported PWG raster type либо общий confirmed color mode допускает реально выдаваемый `black_1`, `sgray_8` или `srgb_8` path.
+
+Page range, odd/even, reverse order, copies, collate, paper, orientation, margins, fit/fill/actual/custom scale, positioning, color mode и resolution применяются software-side до/при создании PWG payload. Поэтому `copies`, `page-ranges`, `media`, `orientation-requested`, `print-color-mode`, `printer-resolution`, `sides` и `multiple-document-handling` не отправляются повторно в IPP и не могут примениться дважды.
+
+Только `media-source`, `media-type` и `output-bin` проходят как Job Template attributes, причём лишь если их имена были получены в `job-creation-attributes-supported`, а exact keyword прошёл повторную validation.
+
+PWG создаётся один раз в unique file каталога `cache/ipp-pwg-spool`. Размер ограничен 512 MiB. После завершения generation известный exact file length используется в HTTP Content-Length; затем файл streaming-читается в единственный Print-Job. Spool удаляется после success, protocol/HTTP error и cancel. Оставшиеся после аварийного завершения файлы удаляются при создании application container.
+
+После начала передачи нет retry/fallback на другой backend: executor выполняет только выбранный backend, чтобы не создать duplicate physical job.
+
 ## Legacy capabilities
 
 IEEE-1284 `CMD` продолжает выбирать только реализованные PDF/PWG/PostScript/PCL5/ESC-POS/RAW paths. PCL XL-only не включает PCL5. Для legacy raster при неизвестной бумаге/DPI может показываться подписанный `BACKEND_DEFAULT` (A4/300), но он не переименовывается в printer-confirmed capability.
 
 ## UI и DataStore
 
-Динамические IPP меню source/type/bin появляются только у IPP Direct и только при полученных options. Exact raw keyword и asymmetric resolution сохраняются в DataStore codec; отсутствующие nullable поля старых локальных presets читаются с default `null` и не вызывают migration crash.
+Динамические IPP меню source/type/bin появляются у IPP Direct и IPP PWG только при полученных options. Exact raw keyword и asymmetric resolution сохраняются в DataStore codec; отсутствующие nullable поля старых локальных presets читаются с default `null` и не вызывают migration crash.
 
 Hidden stale IPP keyword очищается при сохранении настроек backend, который не предоставляет соответствующий option. Validator повторно проверяет raw keyword, paper, resolution, color, duplex, copies и pages перед созданием job.
 
 ## Пока не реализовано
 
-- IPP + PWG Raster generation/Print-Job, если PDF format не поддерживается;
 - `Create-Job` + `Send-Document` path;
+- IPP PWG external CUPS/ipptool validation и physical printer verification;
 - полноценный долговременный job monitor после закрытия foreground service;
 - UI ввода custom width/height, несмотря на готовое confirmed range mapping;
 - software N-up 2/4;

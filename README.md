@@ -25,13 +25,15 @@ Download the current APK from [GitHub Releases](https://github.com/scholnik123/u
 
 The first public APK is debug-signed and intended for direct installation and testing. A production signing key is not included in this repository.
 
+> **Development branch:** `codex/development` contains IPP PWG Raster Print-Job support completed after 1.0.0. It is not part of the published 1.0.0 APK and has not yet been validated on a physical printer.
+
 ## Features
 
 - Direct USB Host / OTG printing with Android USB permission handling
 - Automatic USB printer discovery and selection between multiple connected printers
 - Capability-driven print settings with explicit source and confidence
 - IPP-over-USB discovery and HTTP/IPP transport over USB bulk endpoints
-- IPP Get-Printer-Attributes, direct PDF Print-Job, short-lived job status polling, and Cancel-Job when reported
+- IPP Get-Printer-Attributes, direct PDF Print-Job, development IPP PWG Print-Job, short-lived job status polling, and Cancel-Job when reported
 - PDF Direct, PWG Raster, PostScript Raster, PCL 5 Raster, ESC/POS, and raw printer-language passthrough
 - PDF, image, and UTF-8 text rendering
 - Foreground print jobs with notification cancellation
@@ -47,9 +49,12 @@ For compatible printers, the application can:
 - read printer capabilities with Get-Printer-Attributes;
 - build the settings UI from reported media, resolution, color, duplex, tray, media type, and output-bin values;
 - send a PDF with Print-Job when both the operation and `application/pdf` are reported;
+- on the development branch, render PDF/image/text into PWG Raster and submit it with one Print-Job when `image/pwg-raster`, a compatible raster type, resolution, and Print-Job are reported;
 - query short-lived job status and send Cancel-Job when those operations are reported.
 
-This is not a claim of full IPP Everywhere support. IPP PWG Raster and the Create-Job + Send-Document workflow are not currently implemented.
+IPP PWG uses a unique, size-bounded file under the application cache to obtain an exact HTTP Content-Length. The file is removed after success, error, or cancellation, and abandoned spool files are cleaned at application startup. Copies and page selection are encoded once in the generated PWG document rather than repeated as IPP job attributes.
+
+This is not a claim of full IPP Everywhere support. IPP PWG is a development capability with no physical-printer evidence yet. The Create-Job + Send-Document workflow is not implemented.
 
 ## Capability-driven printing
 
@@ -72,7 +77,7 @@ Legacy Printer Class devices use IEEE-1284 `CMD` detection plus clearly labelled
 - Duplex when confirmed by the printer
 - Exact printer resolution, including asymmetric IPP values
 - Margins, fit/fill/actual/custom scale, and content positioning for raster paths
-- Printer-reported media source, media type, and output bin for IPP Direct
+- Printer-reported media source, media type, and output bin for IPP backends
 - Built-in and local custom presets
 
 Available settings depend on the printer and selected backend. N-up is not presented because the compositor is not implemented.
@@ -82,6 +87,7 @@ Available settings depend on the printer and selected backend. N-up is not prese
 | Backend | Status | Typical use |
 |---|---|---|
 | IPP Direct PDF | Implemented | Direct PDF Print-Job through IPP-over-USB |
+| IPP PWG Raster | Implemented on development branch | Software layout and PWG Raster Print-Job through IPP-over-USB |
 | PDF Direct USB | Implemented | Unmodified PDF to a legacy printer that reports PDF |
 | PWG Raster | Implemented | Rendered PDF/image/text for printers that report PWG Raster |
 | PostScript Raster | Implemented subset | Level 2 rasterized pages for PostScript printers |
@@ -89,7 +95,7 @@ Available settings depend on the printer and selected backend. N-up is not prese
 | ESC/POS | Implemented subset | Text and monochrome raster output for reported ESC/POS devices |
 | RAW | Implemented | Unmodified PS/PCL data for a matching reported printer language |
 
-Not currently implemented: IPP PWG, Create-Job + Send-Document, PCLm, PCL XL/PCL6, URF, and vendor-specific GDI protocols.
+Not currently implemented: Create-Job + Send-Document, PCLm, PCL XL/PCL6, URF, and vendor-specific GDI protocols.
 
 See [BACKEND_MATRIX.md](BACKEND_MATRIX.md) for feature-level details.
 
@@ -182,7 +188,7 @@ The APK is generated at `app/build/outputs/apk/debug/app-debug.apk`.
 
 ## Validation
 
-The first public release passes 61 JVM tests covering IPP wire format and malformed input, HTTP framing, capability mapping, USB discovery, PWG/PCL/PostScript invariants, page planning, and raster memory calculations.
+The first public release passes 61 JVM tests covering IPP wire format and malformed input, HTTP framing, capability mapping, USB discovery, PWG/PCL/PostScript invariants, page planning, and raster memory calculations. The development branch passes 79 JVM tests after adding exact-length IPP PWG spooling, selection, MIME and payload checks, software copies/ranges, cancellation, cleanup, and failure-path coverage.
 
 Internal golden/invariant tests are not equivalent to external validation through CUPS, Ghostscript, or ipptool, and they are not a substitute for physical printer testing. See [VALIDATION_REPORT.md](VALIDATION_REPORT.md) and [docs/TESTING.md](docs/TESTING.md).
 
@@ -191,7 +197,7 @@ Internal golden/invariant tests are not equivalent to external validation throug
 - Compatibility depends on standards and command languages implemented by the printer.
 - Host-based/GDI printers may require proprietary desktop drivers.
 - No hardware-verified printers have been recorded for this release.
-- IPP PWG and Create-Job + Send-Document are not implemented.
+- IPP PWG is implemented only on the development branch and still lacks external reference-tool and physical-printer validation; Create-Job + Send-Document is not implemented.
 - PCLm, PCL XL/PCL6, URF, and vendor-specific protocols are not implemented.
 - N-up is not implemented.
 - IPP custom-paper ranges may be detected, but custom-size UI and job encoding are incomplete.
@@ -207,7 +213,7 @@ See [COMPATIBILITY.md](COMPATIBILITY.md) for evidence levels and the reporting t
 ## Roadmap
 
 - Physical printer validation and evidence-backed compatibility reports
-- IPP PWG Raster
+- Physical-printer validation of the development IPP PWG Raster path
 - Hardware-test confirmation and versioned printer profiles
 - N-up composition
 - Complete custom-paper workflow

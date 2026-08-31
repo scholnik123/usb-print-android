@@ -117,3 +117,13 @@ Android build tools verified:
 - no `INTERNET`, `ACCESS_NETWORK_STATE`, Wi-Fi, Bluetooth, or broad external-storage permission.
 
 The complete release verification summary is recorded in `RELEASE_NOTES_1.0.0.md`, and the distributable checksum is recorded in `SHA256SUMS.txt`.
+
+## Development branch addendum
+
+This section is not part of the public 1.0.0 release verification and does not change the released APK claims.
+
+At commit `18cd740`, the development branch adds IPP PWG Raster Print-Job with a bounded app-cache spool and exact Content-Length. Local verification completed with 79 JVM tests passed, 0 failed, 0 skipped; lint passed with 0 errors and the existing 8 GradleDependency warnings; `assembleDebug` passed. GitHub Android CI run `33409651029` passed tests, lint, assembly, and artifact upload.
+
+The added deterministic coverage includes backend selection, exact MIME and body length, exact PWG producer bytes, multi-page order, software copies/ranges, landscape fixtures, color/grayscale, 600 DPI, cancellation before generation and during upload, spool cleanup, HTTP failure, IPP rejection, and single-exchange/no-retry behavior.
+
+External CUPS/ipptool validation: **not run**. Physical IPP PWG printer validation: **not run**. Hardware-tested printers remain **0**.

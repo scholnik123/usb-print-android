@@ -2,6 +2,29 @@
 
 All notable public changes are documented here. This project begins its public semantic-version history with 1.0.0.
 
+## Unreleased
+
+Development changes below are not part of the published 1.0.0 APK.
+
+### Added
+
+- IPP PWG Raster Print-Job for PDF, image, and UTF-8 text when the printer reports Print-Job, `image/pwg-raster`, and a raster type/resolution emitted by the local encoder
+- Reusable PWG stream producer shared by legacy USB PWG and IPP PWG backends
+- Unique, 512 MiB-bounded PWG spool files under application cache, with cleanup after success/error/cancellation and abandoned-file cleanup at startup
+- Exact HTTP Content-Length coverage for combined IPP and PWG document bytes
+- Tests for IPP PWG backend selection, exact MIME/payload/length, multi-page order, copies, ranges, landscape, color/grayscale, 600 DPI, cancellation, cleanup, HTTP errors, IPP rejection, and single-submission behavior
+
+### Changed
+
+- Software copies, page selection, paper, orientation, margins, scaling, positioning, color, and resolution are encoded in PWG output; copies and page ranges are not duplicated as IPP job attributes
+- Confirmed media source, media type, and output-bin keywords may pass through as IPP job attributes
+- IPP PWG rejects unimplemented raster encodings such as `srgb_16` instead of treating them as compatible
+
+### Validation
+
+- 79 JVM tests pass on the development branch; Android lint and debug assembly pass
+- Hardware-tested printers remain 0; no physical IPP PWG compatibility is claimed
+
 ## 1.0.0 - 2026-08-31
 
 First public release.

@@ -19,6 +19,8 @@ Successful USB or IPP transfer does not automatically mean that the physical pag
 
 No hardware-verified printers have been recorded yet.
 
+The development IPP PWG backend is covered by deterministic tests but has not been promoted to hardware-verified compatibility. It does not add a printer row without a user-observed physical result.
+
 | Manufacturer | Model | VID:PID | Protocol | Reported formats | Backend | Paper | Resolution | Color | Duplex | Result | App version |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | — | — | — | — | — | — | — | — | — | — | No verified records | 1.0.0 |
