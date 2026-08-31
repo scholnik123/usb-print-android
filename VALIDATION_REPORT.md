@@ -127,3 +127,5 @@ At commit `18cd740`, the development branch adds IPP PWG Raster Print-Job with a
 The added deterministic coverage includes backend selection, exact MIME and body length, exact PWG producer bytes, multi-page order, software copies/ranges, landscape fixtures, color/grayscale, 600 DPI, cancellation before generation and during upload, spool cleanup, HTTP failure, IPP rejection, and single-exchange/no-retry behavior.
 
 External CUPS/ipptool validation: **not run**. Physical IPP PWG printer validation: **not run**. Hardware-tested printers remain **0**.
+
+The subsequent development hardware-test wizard verification completed with 86 JVM tests passed, 0 failed, 0 skipped; lint passed with 0 errors and the existing 8 GradleDependency warnings; `assembleDebug` passed. Its unit tests cover required outcomes, issue validation, matching-job terminal transitions, cancellation, duplicate terminal state, unrelated jobs, and service-start failure. Compose connected tests remain **not run: no device/emulator**. No observation was created during automated tests and the hardware-tested printer count remains **0**.

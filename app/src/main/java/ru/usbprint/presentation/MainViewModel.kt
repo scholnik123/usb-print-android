@@ -21,6 +21,9 @@ import ru.usbprint.domain.model.BackendId
 import ru.usbprint.domain.model.DocumentRef
 import ru.usbprint.domain.model.EffectivePrintCapabilities
 import ru.usbprint.domain.model.ExperimentalPrinterOverride
+import ru.usbprint.domain.model.HardwarePrintIssue
+import ru.usbprint.domain.model.HardwareTestObservation
+import ru.usbprint.domain.model.HardwareTestOutcome
 import ru.usbprint.domain.model.PageSelection
 import ru.usbprint.domain.model.PrintException
 import ru.usbprint.domain.model.PrintJob
@@ -44,13 +47,18 @@ data class MainUiState(
     val progress: Int = 0,
     val jobDetail: String? = null,
     val error: AppError? = null,
-    val isLoadingDocument: Boolean = false
+    val isLoadingDocument: Boolean = false,
+    val isHardwareTestDocument: Boolean = false,
+    val hardwareTestAwaitingResult: Boolean = false,
+    val showHardwareTestWizard: Boolean = false,
+    val lastHardwareTestObservation: HardwareTestObservation? = null
 )
 
 class MainViewModel(private val container: AppContainer) : ViewModel() {
     private val _state = MutableStateFlow(MainUiState())
     val state = _state.asStateFlow()
     val logs = container.log.entries
+    private val hardwareTestJobs = HardwareTestJobTracker()
 
     init {
         container.printerController.start()
@@ -64,7 +72,17 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
         viewModelScope.launch { container.preferences.customPresets.collectLatest { presets -> _state.update { it.copy(customPresets = presets) } } }
         viewModelScope.launch {
             container.printExecutor.state.collectLatest { execution ->
-                _state.update { current -> current.copy(jobStatus = execution.status, progress = execution.progress, jobDetail = execution.detail, error = execution.error ?: current.error) }
+                val shouldRequestObservation = hardwareTestJobs.onExecution(execution.jobId, execution.status)
+                _state.update { current ->
+                    current.copy(
+                        jobStatus = execution.status,
+                        progress = execution.progress,
+                        jobDetail = execution.detail,
+                        error = execution.error ?: current.error,
+                        hardwareTestAwaitingResult = current.hardwareTestAwaitingResult || shouldRequestObservation,
+                        showHardwareTestWizard = current.showHardwareTestWizard || shouldRequestObservation
+                    )
+                }
             }
         }
     }
@@ -73,8 +91,21 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
     fun refreshPrinter() = container.printerController.refresh()
     fun selectPrinter(deviceKey: String) = container.printerController.selectPrinter(deviceKey)
 
-    fun loadDocument(uri: Uri) = viewModelScope.launch {
-        _state.update { it.copy(isLoadingDocument = true, error = null, jobStatus = null, preview = null) }
+    fun loadDocument(uri: Uri) = viewModelScope.launch { loadDocument(uri, isHardwareTest = false) }
+
+    private suspend fun loadDocument(uri: Uri, isHardwareTest: Boolean) {
+        _state.update {
+            it.copy(
+                isLoadingDocument = true,
+                error = null,
+                jobStatus = null,
+                preview = null,
+                isHardwareTestDocument = isHardwareTest,
+                hardwareTestAwaitingResult = if (isHardwareTest) false else it.hardwareTestAwaitingResult,
+                showHardwareTestWizard = if (isHardwareTest) false else it.showHardwareTestWizard,
+                lastHardwareTestObservation = if (isHardwareTest) null else it.lastHardwareTestObservation
+            )
+        }
         runCatching {
             val document = container.documents.inspect(uri)
             document to container.documents.renderPreview(document)
@@ -84,7 +115,13 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
             }
             container.log.add("Document selected: ${document.kind}, ${document.sizeBytes ?: 0} bytes")
         }.onFailure { throwable ->
-            _state.update { it.copy(isLoadingDocument = false, error = (throwable as? PrintException)?.error ?: AppError.DOCUMENT_READ_ERROR) }
+            _state.update {
+                it.copy(
+                    isLoadingDocument = false,
+                    isHardwareTestDocument = false,
+                    error = (throwable as? PrintException)?.error ?: AppError.DOCUMENT_READ_ERROR
+                )
+            }
         }
     }
 
@@ -92,7 +129,7 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
         runCatching { container.hardwareTestPage.create() }
             .onSuccess { uri ->
                 container.log.add("Local hardware test page created")
-                loadDocument(uri)
+                loadDocument(uri, isHardwareTest = true)
             }
             .onFailure { _state.update { it.copy(error = AppError.DOCUMENT_READ_ERROR) } }
     }
@@ -122,14 +159,44 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
             return
         }
         val job = PrintJob(document = document, printer = printer, settings = current.settings, backend = current.backend.selected)
+        if (current.isHardwareTestDocument) hardwareTestJobs.started(job.id)
         if (PrintForegroundService.start(container.appContext, job)) {
-            _state.update { it.copy(jobStatus = PrintJobStatus.VALIDATING, progress = 0, error = null) }
+            _state.update {
+                it.copy(
+                    jobStatus = PrintJobStatus.VALIDATING,
+                    progress = 0,
+                    error = null,
+                    hardwareTestAwaitingResult = if (current.isHardwareTestDocument) false else it.hardwareTestAwaitingResult,
+                    showHardwareTestWizard = if (current.isHardwareTestDocument) false else it.showHardwareTestWizard,
+                    lastHardwareTestObservation = if (current.isHardwareTestDocument) null else it.lastHardwareTestObservation
+                )
+            }
         } else {
+            hardwareTestJobs.startFailed(job.id)
             _state.update { it.copy(error = AppError.TRANSFER_ERROR) }
         }
     }
 
     fun cancelPrint() = PrintForegroundService.cancel(container.appContext)
+    fun openHardwareTestWizard() = _state.update { if (it.hardwareTestAwaitingResult) it.copy(showHardwareTestWizard = true) else it }
+    fun dismissHardwareTestWizard() = _state.update { it.copy(showHardwareTestWizard = false) }
+    fun recordHardwareTestObservation(outcome: HardwareTestOutcome, issues: Set<HardwarePrintIssue>, notes: String?) {
+        val observation = runCatching {
+            HardwareTestObservation(outcome, issues, notes?.trim()?.takeIf(String::isNotEmpty))
+        }.getOrElse {
+            _state.update { state -> state.copy(error = AppError.INVALID_SETTINGS) }
+            return
+        }
+        container.log.add("Hardware test observation recorded: ${outcome.name}; issues=${issues.joinToString { it.name }}")
+        _state.update {
+            it.copy(
+                hardwareTestAwaitingResult = false,
+                showHardwareTestWizard = false,
+                lastHardwareTestObservation = observation,
+                error = null
+            )
+        }
+    }
     fun clearError() = _state.update { it.copy(error = null) }
     fun setAdvancedMode(enabled: Boolean) = viewModelScope.launch { container.preferences.setAdvancedMode(enabled) }
     fun applyPreset(settings: PrintSettings) = updateSettings(settings)

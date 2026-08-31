@@ -20,7 +20,7 @@ Windows:
 .\gradlew.bat assembleDebug
 ```
 
-The first public release baseline is 61 JVM tests. The development branch baseline after IPP PWG integration is 79 JVM tests. The number is not a target by itself; wire boundaries, protocol selection, cleanup, and overflow behavior are the important coverage.
+The first public release baseline is 61 JVM tests. The development branch baseline after IPP PWG integration and the hardware-test result wizard is 86 JVM tests. The number is not a target by itself; wire boundaries, protocol selection, cleanup, state transitions, and overflow behavior are the important coverage.
 
 ## JVM and unit tests
 
@@ -49,6 +49,15 @@ The unit suite covers:
 - Bounded unique app-cache spool creation, maximum size, close cleanup, and startup cleanup
 - IPP PWG MIME, payload bytes, copies/range non-duplication, cancellation before generation and during upload
 - Cleanup after HTTP failure and IPP rejection, with one exchange and no retry after transmission begins
+
+## Hardware-test workflow tests
+
+- All seven required user-observed outcomes and eleven printed-page issue classifications
+- Invalid observation rejection: issues without “printed with issues”, missing issue classifications, and blank “other” descriptions
+- Matching calibration jobs request one observation after `SENT` or `ERROR`
+- Ordinary jobs, cancelled calibration jobs, duplicate terminal emissions, and foreground-service start failures do not request an observation
+
+The Compose dialog is not covered by an Android connected test because no emulator/device target is available. This remains `NOT RUN`, not a passed UI test.
 
 ## Golden and invariant tests
 

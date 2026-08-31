@@ -76,6 +76,8 @@ import ru.usbprint.domain.model.PrintPresetId
 import ru.usbprint.domain.model.PageOrder
 import ru.usbprint.domain.model.EffectivePrintCapabilities
 import ru.usbprint.domain.model.ExperimentalPrinterOverride
+import ru.usbprint.domain.model.HardwarePrintIssue
+import ru.usbprint.domain.model.HardwareTestOutcome
 import ru.usbprint.domain.model.PrinterResolution
 import ru.usbprint.domain.model.PrinterKeywordOption
 import ru.usbprint.domain.model.ScalingMode
@@ -142,6 +144,14 @@ private fun UsbPrintScreen(viewModel: MainViewModel, onSelect: () -> Unit, onExp
                 state.backend.reason?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
             }
             PrintAction(state, viewModel::print, viewModel::cancelPrint)
+            if (state.hardwareTestAwaitingResult) {
+                OutlinedButton(onClick = viewModel::openHardwareTestWizard, modifier = Modifier.fillMaxWidth()) {
+                    Text("Оценить результат тестовой печати")
+                }
+            }
+            state.lastHardwareTestObservation?.let { observation ->
+                Text("Последняя оценка теста: ${observation.outcome.label}", style = MaterialTheme.typography.bodySmall)
+            }
             Spacer(Modifier.height(10.dp))
         }
     }
@@ -153,6 +163,64 @@ private fun UsbPrintScreen(viewModel: MainViewModel, onSelect: () -> Unit, onExp
         onAdvancedMode = viewModel::setAdvancedMode, onSaveOverride = viewModel::saveExperimentalOverride
     )
     if (showDiagnostics) DiagnosticsDialog(viewModel.diagnostics(), logs, onExportText, onExportJson, onDismiss = { showDiagnostics = false })
+    if (state.showHardwareTestWizard) HardwareTestResultDialog(
+        onDismiss = viewModel::dismissHardwareTestWizard,
+        onSave = viewModel::recordHardwareTestObservation
+    )
+}
+
+@Composable
+private fun HardwareTestResultDialog(
+    onDismiss: () -> Unit,
+    onSave: (HardwareTestOutcome, Set<HardwarePrintIssue>, String?) -> Unit
+) {
+    var outcome by remember { mutableStateOf<HardwareTestOutcome?>(null) }
+    var issues by remember { mutableStateOf(emptySet<HardwarePrintIssue>()) }
+    var notes by remember { mutableStateOf("") }
+    val canSave = outcome != null &&
+        (outcome != HardwareTestOutcome.PRINTED_WITH_ISSUES || issues.isNotEmpty()) &&
+        (outcome != HardwareTestOutcome.OTHER || notes.isNotBlank())
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Что произошло на бумаге?") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("SENT или IPP completed не подтверждают физическую печать. Выберите только то, что вы увидели.")
+                if (outcome == null) {
+                    HardwareTestOutcome.entries.forEach { item ->
+                        OutlinedButton(onClick = { outcome = item }, modifier = Modifier.fillMaxWidth()) { Text(item.label) }
+                    }
+                } else {
+                    Text("Результат: ${outcome?.label}", style = MaterialTheme.typography.titleSmall)
+                    OutlinedButton(onClick = { outcome = null; issues = emptySet() }) { Text("Изменить результат") }
+                    if (outcome == HardwareTestOutcome.PRINTED_WITH_ISSUES) {
+                        Text("Отметьте все замеченные проблемы:")
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            HardwarePrintIssue.entries.forEach { issue ->
+                                FilterChip(
+                                    selected = issue in issues,
+                                    onClick = { issues = if (issue in issues) issues - issue else issues + issue },
+                                    label = { Text(issue.label) }
+                                )
+                            }
+                        }
+                    }
+                    OutlinedTextField(
+                        value = notes,
+                        onValueChange = { notes = it.take(500) },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text(if (outcome == HardwareTestOutcome.OTHER) "Описание (обязательно)" else "Комментарий (необязательно)") },
+                        supportingText = { Text("Не указывайте имя документа, серийный номер или другие личные данные.") }
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = { outcome?.let { onSave(it, issues, notes) } }, enabled = canSave) { Text("Сохранить наблюдение") }
+        },
+        dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Позже") } }
+    )
 }
 
 @Composable private fun PrinterCard(state: MainUiState, onPermission: () -> Unit, onRefresh: () -> Unit, onSelectPrinter: (String) -> Unit) {

@@ -21,6 +21,10 @@ No hardware-verified printers have been recorded yet.
 
 The development IPP PWG backend is covered by deterministic tests but has not been promoted to hardware-verified compatibility. It does not add a printer row without a user-observed physical result.
 
+The development hardware-test wizard records only an explicit physical observation. It offers: printed correctly, printed with issues, accepted with no page, printer error, nothing happened, connection lost, or other. “Printed with issues” can classify crop, paper, orientation, color, grayscale, blank/garbage output, extra pages, scale, margins, and duplex defects. `SENT`, bulk-transfer success, or IPP completed never selects a successful outcome.
+
+Wizard observations are currently session state. Versioned persistent profiles, revalidation rules, and privacy-safe JSON compatibility export are separate upcoming stages, so the table remains empty.
+
 | Manufacturer | Model | VID:PID | Protocol | Reported formats | Backend | Paper | Resolution | Color | Duplex | Result | App version |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | — | — | — | — | — | — | — | — | — | — | No verified records | 1.0.0 |

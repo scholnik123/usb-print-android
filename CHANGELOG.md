@@ -13,6 +13,8 @@ Development changes below are not part of the published 1.0.0 APK.
 - Unique, 512 MiB-bounded PWG spool files under application cache, with cleanup after success/error/cancellation and abandoned-file cleanup at startup
 - Exact HTTP Content-Length coverage for combined IPP and PWG document bytes
 - Tests for IPP PWG backend selection, exact MIME/payload/length, multi-page order, copies, ranges, landscape, color/grayscale, 600 DPI, cancellation, cleanup, HTTP errors, IPP rejection, and single-submission behavior
+- Post-print hardware-test result wizard with seven physical outcomes, eleven issue classifications, optional privacy warning/notes, and a deferred “evaluate later” action
+- Test-job tracking that opens the wizard only for the matching calibration job after `SENT` or `ERROR`, never for ordinary, cancelled, or failed-to-start jobs
 
 ### Changed
 
@@ -22,7 +24,7 @@ Development changes below are not part of the published 1.0.0 APK.
 
 ### Validation
 
-- 79 JVM tests pass on the development branch; Android lint and debug assembly pass
+- 86 JVM tests pass on the development branch; Android lint and debug assembly pass
 - Hardware-tested printers remain 0; no physical IPP PWG compatibility is claimed
 
 ## 1.0.0 - 2026-08-31
