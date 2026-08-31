@@ -1,0 +1,48 @@
+# Gradle / Android builds
+.gradle/
+.kotlin/
+build/
+**/build/
+local.properties
+captures/
+.externalNativeBuild/
+.cxx/
+
+# IDE and operating-system files
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Signing material and secrets
+*.jks
+*.keystore
+debug.keystore
+.env
+.env.*
+secrets.properties
+
+# Local release artifacts and generated reports
+artifacts/
+*.apk
+*.aab
+*.apks
+*.log
+lint-results-*.html
+lint-results-*.xml
+
+# Private diagnostics, printer profiles, and generated test documents
+diagnostics/
+private-diagnostics/
+printer-profiles/
+*.private.json
+hardware-test-*.pdf
+test-page-*.pdf
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak
+*~
