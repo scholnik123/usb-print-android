@@ -1,0 +1,120 @@
+# Print capabilities
+
+## Основное правило
+
+Неизвестная capability не считается поддержанной. UI получает не исходный `PrinterCapabilities`, а `EffectivePrintCapabilities` — пересечение реально полученных данных принтера с возможностями конкретного encoder/backend.
+
+```text
+USB descriptors ─┐
+IEEE-1284 CMD ───┼→ PrinterCapabilities + source/confidence
+IPP attributes ──┘                 │
+                                   ▼
+                     BackendCapabilityDescriptor
+                                   │ intersection
+                                   ▼
+                     EffectivePrintCapabilities
+                                   │
+                      UI → validator → backend
+```
+
+`AUTO` означает «не отправлять принтеру принудительное значение» и не является заявлением поддержки формата, цвета или ориентации.
+
+## Source priority и confidence
+
+| Source | Приоритет | Что реально реализовано |
+|---|---:|---|
+| `USER_OVERRIDE` | 5 | Только opt-in experimental override конкретного устройства |
+| `IPP` | 4 | Реальный `Get-Printer-Attributes` через IPP-over-USB |
+| `IEEE1284` | 3 | Device ID, CMD и производные языки печати |
+| `USB_DESCRIPTOR` | 2 | Interface class/subclass/protocol и endpoints |
+| `KNOWN_PROFILE` | 1 | Тип зарезервирован; verified profile persistence ещё не завершён |
+| `BACKEND_DEFAULT` | 0 | Явно подписанный безопасный fallback только для legacy raster backend |
+
+Confidence: `CONFIRMED`, `DERIVED`, `DEFAULT`, `EXPERIMENTAL`. Значение IPP получает `IPP/CONFIRMED` только если соответствующий attribute действительно присутствовал в response. Отсутствующий attribute не создаётся автоматически.
+
+## IPP-over-USB discovery
+
+Устройство признаётся IPP-over-USB только при одновременном выполнении условий:
+
+- USB interface class 7;
+- subclass 1;
+- protocol 4;
+- на каждом выбранном interface есть Bulk OUT и Bulk IN;
+- найдено минимум два эквивалентных protocol-4 interface.
+
+VID/PID не используется как доказательство IPP. Обычный Printer Class bulk OUT не считается IPP endpoint. В composite device legacy backend использует обычный printer interface, IPP backend — отдельный protocol-4 interface. В IPP-only device legacy/raw fallback запрещён, чтобы PDF не ушёл без HTTP framing.
+
+## Запрашиваемые IPP attributes
+
+`Get-Printer-Attributes` запрашивает ограниченный явный список:
+
+- printer name/info/make-and-model/state/state-reasons/accepting-jobs;
+- IPP versions и operations;
+- document formats;
+- media supported/ready/default;
+- media-col supported/ready/database/default;
+- media source/type и output bin supported/default;
+- resolution, sides, color, copies, quality, orientation и page-ranges;
+- job-creation attributes, job-hold, compression;
+- URF/PWG raster attributes, если устройство их возвращает.
+
+Неответившие attributes допустимы и остаются неизвестными.
+
+## Реальный mapping
+
+- `media-supported`, `media-ready`, `media-default` и известные `media-size` из `media-col` → стандартные `PaperSize`;
+- `media-col` margins (hundredths of millimetre) → `HardwareMarginsMm`;
+- rangeOfInteger `x-dimension/y-dimension` → `CustomPaperRangeMicrons` с явным conversion `hundredths mm × 10 = microns`;
+- `printer-resolution-supported` → `PrinterResolution(xDpi,yDpi)`, включая 600×1200;
+- `print-color-mode-supported`/`color-supported` → подтверждённые color modes;
+- `sides-supported` → simplex/long-edge/short-edge;
+- `copies-supported` → подтверждённый диапазон;
+- `media-source`, `media-type`, `output-bin` → `PrinterKeywordOption(rawKeyword, localizedDisplayName)`;
+- document formats → доступные языки local backend;
+- operations/job-creation attributes → разрешённые IPP операции и Job Template attributes.
+
+Raw keyword не теряется: UI показывает русское имя, а `Print-Job` отправляет исходное значение принтера. Неизвестный keyword безопасно отображается как есть.
+
+## IPP Direct effective settings
+
+IPP Direct доступен только для PDF с известным Content-Length, подтверждёнными `Print-Job` и `application/pdf`, состоянием accepting-jobs не равным false и настройками без локальной модификации PDF layout.
+
+В job отправляется только attribute, имя которого присутствует в `job-creation-attributes-supported`:
+
+- copies;
+- media;
+- sides;
+- print-color-mode;
+- printer-resolution (включая asymmetric X/Y);
+- orientation-requested;
+- print-quality;
+- page-ranges;
+- multiple-document-handling;
+- media-source;
+- media-type;
+- output-bin.
+
+Operation attributes (charset, natural language, printer URI, user/job name, document format, fidelity) формируются отдельно. Unsupported настройки не посылаются «на удачу».
+
+Если response содержит `job-id`/`job-uri` и operations подтверждают `Get-Job-Attributes`, приложение читает `job-state`, reasons, impressions и sheets completed во время короткого bounded polling. При запросе пользователя и подтверждённой операции `Cancel-Job` отправляется cancel. Без IPP остаётся честный legacy статус «Задание передано принтеру».
+
+## Legacy capabilities
+
+IEEE-1284 `CMD` продолжает выбирать только реализованные PDF/PWG/PostScript/PCL5/ESC-POS/RAW paths. PCL XL-only не включает PCL5. Для legacy raster при неизвестной бумаге/DPI может показываться подписанный `BACKEND_DEFAULT` (A4/300), но он не переименовывается в printer-confirmed capability.
+
+## UI и DataStore
+
+Динамические IPP меню source/type/bin появляются только у IPP Direct и только при полученных options. Exact raw keyword и asymmetric resolution сохраняются в DataStore codec; отсутствующие nullable поля старых локальных presets читаются с default `null` и не вызывают migration crash.
+
+Hidden stale IPP keyword очищается при сохранении настроек backend, который не предоставляет соответствующий option. Validator повторно проверяет raw keyword, paper, resolution, color, duplex, copies и pages перед созданием job.
+
+## Пока не реализовано
+
+- IPP + PWG Raster generation/Print-Job, если PDF format не поддерживается;
+- `Create-Job` + `Send-Document` path;
+- полноценный долговременный job monitor после закрытия foreground service;
+- UI ввода custom width/height, несмотря на готовое confirmed range mapping;
+- software N-up 2/4;
+- PCLm;
+- verified hardware profile storage/automatic confidence promotion;
+- per-value provenance внутри одного mixed set (например, `AUTO` и confirmed orientations).

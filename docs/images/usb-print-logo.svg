@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 48 48" role="img" aria-labelledby="title desc">
+  <title id="title">USB Print logo</title>
+  <desc id="desc">White printer symbol on a blue square, matching the Android application icon.</desc>
+  <rect x="6" y="5" width="36" height="38" rx="2" fill="#2457A5"/>
+  <path fill="#FFFFFF" d="M13 11h22v11H13zM10 24h28v13H10zM15 28h18v5H15z"/>
+  <path fill="#2457A5" d="M19 14h10v5H19z"/>
+</svg>
