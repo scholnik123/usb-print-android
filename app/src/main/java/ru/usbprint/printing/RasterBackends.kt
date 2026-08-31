@@ -27,29 +27,34 @@ class PwgRasterBackend : PrintingBackend {
         }
         val dpi = selectDpi(job)
         val duplex = job.settings.duplexMode != DuplexMode.OFF && job.printer.capabilities.supportsDuplex == true
-        transport.write(PwgRasterEncoder.syncWord)
         documents.createRenderer(job.document).use { renderer ->
-            val total = pages.size
-            var completed = 0
-            pages.forEach { page ->
-                    ensureNotCancelled(isCancelled)
+            PwgRasterProducer.write(
+                pages = pages,
+                openPage = { page ->
                     val (sourceWidth, sourceHeight) = renderer.pageSize(page - 1)
-                    val layout = try { PrintLayoutEngine.create(job.settings, sourceWidth, sourceHeight, dpi, BackendRegistry.effectiveFor(id, job.printer.capabilities).hardwareMargins?.value ?: ru.usbprint.domain.model.HardwareMarginsMm.ZERO) }
-                    catch (badDimension: IllegalArgumentException) { throw PrintException(AppError.OUT_OF_MEMORY_PREVENTED, badDimension) }
-                    val header = PwgRasterHeader(layout, mode, duplex, job.settings.duplexMode == DuplexMode.SHORT_EDGE)
-                    transport.write(header.toBytes())
-                    RasterPageSource(renderer, page - 1, layout, mode).use { source ->
-                        val line = ByteArray(header.bytesPerLine)
-                        val colorValueSize = (header.bitsPerPixel + 7) / 8
-                        for (y in 0 until layout.heightPx) {
-                            ensureNotCancelled(isCancelled)
-                            source.renderRow(y, line)
-                            transport.write(PwgRasterEncoder.encodeLine(line, colorValueSize))
-                        }
+                    val layout = try {
+                        PrintLayoutEngine.create(
+                            job.settings,
+                            sourceWidth,
+                            sourceHeight,
+                            dpi,
+                            BackendRegistry.effectiveFor(id, job.printer.capabilities).hardwareMargins?.value
+                                ?: ru.usbprint.domain.model.HardwareMarginsMm.ZERO
+                        )
+                    } catch (badDimension: IllegalArgumentException) {
+                        throw PrintException(AppError.OUT_OF_MEMORY_PREVENTED, badDimension)
                     }
-                    completed++
-                    onProgress((completed * 100 / total).coerceIn(1, 100))
-            }
+                    val source = RasterPageSource(renderer, page - 1, layout, mode)
+                    object : PwgRasterPage {
+                        override val header = PwgRasterHeader(layout, mode, duplex, job.settings.duplexMode == DuplexMode.SHORT_EDGE)
+                        override fun renderRow(rowIndex: Int, destination: ByteArray) = source.renderRow(rowIndex, destination)
+                        override fun close() = source.close()
+                    }
+                },
+                writeBytes = transport::write,
+                onPageCompleted = { completed, total -> onProgress((completed * 100 / total).coerceIn(1, 100)) },
+                isCancelled = isCancelled
+            )
         }
     }
 
