@@ -1,0 +1,49 @@
+name: Feature request
+description: Propose a focused user, protocol, backend, or documentation improvement.
+title: "[Feature]: "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: Explain the user need before proposing an implementation.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - USB discovery and permissions
+        - IPP-over-USB
+        - Printing backend or encoder
+        - Document rendering
+        - Print settings and preview
+        - Diagnostics and privacy
+        - Testing and validation
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: protocol
+    attributes:
+      label: Protocol or hardware evidence
+      description: If printer-specific, provide a public specification or redacted evidence. VID/PID alone is insufficient.
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope confirmation
+      options:
+        - label: This request does not include private documents, credentials, or unredacted serial numbers.
+          required: true

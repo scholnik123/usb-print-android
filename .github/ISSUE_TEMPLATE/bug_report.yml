@@ -1,0 +1,75 @@
+name: Bug report
+description: Report a reproducible application, rendering, protocol, or USB workflow problem.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not attach private documents, print payloads, credentials, or unredacted serial numbers. Review diagnostics before posting.
+
+  - type: input
+    id: version
+    attributes:
+      label: USB Print version
+      placeholder: "1.0.0"
+    validations:
+      required: true
+
+  - type: input
+    id: android
+    attributes:
+      label: Android version and phone/tablet model
+      placeholder: "Android 14, device model"
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem description
+      description: What happened, and what did you expect?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      placeholder: |
+        1. Connect ...
+        2. Select ...
+        3. Print ...
+    validations:
+      required: true
+
+  - type: input
+    id: printer
+    attributes:
+      label: Printer manufacturer and exact model
+      placeholder: "Leave blank if unrelated to a printer"
+
+  - type: input
+    id: protocol
+    attributes:
+      label: Detected protocol and backend
+      placeholder: "IPP-over-USB / IPP Direct PDF"
+
+  - type: textarea
+    id: settings
+    attributes:
+      label: Document format and print settings
+      description: Do not include the private document name or content.
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Redacted diagnostics or logs
+      description: Attach or paste only after removing private document information and serial numbers.
+
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy confirmation
+      options:
+        - label: I removed private document information, credentials, and printer/device serial numbers.
+          required: true

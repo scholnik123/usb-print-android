@@ -1,0 +1,145 @@
+name: Printer compatibility report
+description: Submit evidence about one exact printer model and print result.
+title: "[Printer]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Detection or successful byte transfer is not automatically a confirmed physical print. Report exactly what happened. Remove private document information and serial numbers before posting.
+
+  - type: input
+    id: app_version
+    attributes:
+      label: USB Print version
+      placeholder: "1.0.0"
+    validations:
+      required: true
+
+  - type: input
+    id: android_version
+    attributes:
+      label: Android version
+      placeholder: "Android 14"
+    validations:
+      required: true
+
+  - type: input
+    id: phone_model
+    attributes:
+      label: Phone or tablet model
+    validations:
+      required: true
+
+  - type: input
+    id: printer_manufacturer
+    attributes:
+      label: Printer manufacturer
+    validations:
+      required: true
+
+  - type: input
+    id: printer_model
+    attributes:
+      label: Exact printer model
+    validations:
+      required: true
+
+  - type: input
+    id: vid_pid
+    attributes:
+      label: USB VID:PID
+      placeholder: "1234:abcd"
+    validations:
+      required: true
+
+  - type: input
+    id: protocol
+    attributes:
+      label: Detected protocol
+      placeholder: "IPP-over-USB, Printer Class, or unknown"
+    validations:
+      required: true
+
+  - type: input
+    id: backend
+    attributes:
+      label: Detected/selected backend
+      placeholder: "IPP Direct PDF, PWG Raster, PCL 5 Raster, ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: reported_formats
+    attributes:
+      label: Reported CMD and document formats
+      description: Paste only redacted values from diagnostics.
+
+  - type: dropdown
+    id: ipp
+    attributes:
+      label: Was IPP-over-USB detected?
+      options:
+        - "Yes"
+        - "No"
+        - "Unknown"
+    validations:
+      required: true
+
+  - type: input
+    id: document_format
+    attributes:
+      label: Document format
+      placeholder: "PDF, PNG, TXT, PS, PCL/PRN"
+    validations:
+      required: true
+
+  - type: textarea
+    id: settings
+    attributes:
+      label: Print settings
+      placeholder: "A4, 300 DPI, grayscale, simplex, one copy"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: result
+    attributes:
+      label: Result
+      options:
+        - Printer detected only
+        - Capabilities read
+        - Job transferred, no confirmed page
+        - Printed correctly and visually confirmed
+        - Printed with size or cropping issues
+        - Printed with orientation issues
+        - Printed with color or grayscale issues
+        - Printed blank or corrupted output
+        - Printer reported an error
+        - Nothing happened
+        - Connection was lost
+    validations:
+      required: true
+
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed physical output
+      description: Describe the page result without attaching private document content.
+    validations:
+      required: true
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Redacted diagnostics attachment
+      description: Attach the TXT/JSON export only after reviewing and removing private data and serial numbers.
+
+  - type: checkboxes
+    id: confirmation
+    attributes:
+      label: Confirmation
+      options:
+        - label: This report is for the exact printer model listed above and is not a brand-wide claim.
+          required: true
+        - label: I removed private document information and printer/device serial numbers.
+          required: true
