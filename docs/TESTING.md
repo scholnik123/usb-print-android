@@ -20,7 +20,7 @@ Windows:
 .\gradlew.bat assembleDebug
 ```
 
-The first public release baseline is 61 JVM tests. The development branch baseline after IPP PWG, the hardware-test wizard, and persistent verified profiles is 95 JVM tests. The number is not a target by itself; wire boundaries, protocol selection, cleanup, state transitions, privacy invariants, and overflow behavior are the important coverage.
+The first public release baseline is 61 JVM tests. The development branch baseline after IPP PWG, hardware-test profiles, and compatibility export is 97 JVM tests. The number is not a target by itself; wire boundaries, protocol selection, cleanup, state transitions, privacy invariants, and overflow behavior are the important coverage.
 
 ## JVM and unit tests
 
@@ -60,6 +60,7 @@ The unit suite covers:
 - Stable SHA-256 identity without stored raw serial/device key and bounded 20-record history
 - Encoder-version invalidation to `NEEDS_REVALIDATION` while retaining historical observations
 - Deterministic profile codec round trip for Unicode/reserved characters and malformed-record rejection
+- Compatibility JSON required-field/escaping checks and explicit exclusion of actual identity hash, raw identifiers, notes, document metadata, URI, filename, and payload
 
 The Compose dialog is not covered by an Android connected test because no emulator/device target is available. This remains `NOT RUN`, not a passed UI test.
 

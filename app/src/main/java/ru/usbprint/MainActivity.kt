@@ -92,6 +92,7 @@ class MainActivity : ComponentActivity() {
     private val requestNotifications = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
     private val exportDiagnosticsTxt = registerForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri -> uri?.let { viewModel.exportDiagnostics(it, false) } }
     private val exportDiagnosticsJson = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri -> uri?.let { viewModel.exportDiagnostics(it, true) } }
+    private val exportCompatibilityJson = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri -> uri?.let(viewModel::exportCompatibilityRecord) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -101,7 +102,13 @@ class MainActivity : ComponentActivity() {
         handleIncomingIntent(intent)
         setContent {
             UsbPrintTheme(darkTheme = androidx.compose.foundation.isSystemInDarkTheme()) {
-                UsbPrintScreen(viewModel = viewModel, onSelect = { openDocument.launch(SUPPORTED_MIME_TYPES) }, onExportText = { exportDiagnosticsTxt.launch("USB-Print-diagnostics.txt") }, onExportJson = { exportDiagnosticsJson.launch("USB-Print-diagnostics.json") })
+                UsbPrintScreen(
+                    viewModel = viewModel,
+                    onSelect = { openDocument.launch(SUPPORTED_MIME_TYPES) },
+                    onExportText = { exportDiagnosticsTxt.launch("USB-Print-diagnostics.txt") },
+                    onExportJson = { exportDiagnosticsJson.launch("USB-Print-diagnostics.json") },
+                    onExportCompatibility = { exportCompatibilityJson.launch("USB-Print-compatibility.json") }
+                )
             }
         }
     }
@@ -123,7 +130,13 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun UsbPrintScreen(viewModel: MainViewModel, onSelect: () -> Unit, onExportText: () -> Unit, onExportJson: () -> Unit) {
+private fun UsbPrintScreen(
+    viewModel: MainViewModel,
+    onSelect: () -> Unit,
+    onExportText: () -> Unit,
+    onExportJson: () -> Unit,
+    onExportCompatibility: () -> Unit
+) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val logs by viewModel.logs.collectAsStateWithLifecycle()
     val snackbars = remember { SnackbarHostState() }
@@ -154,6 +167,10 @@ private fun UsbPrintScreen(viewModel: MainViewModel, onSelect: () -> Unit, onExp
             }
             state.verifiedPrinterProfile?.let { profile ->
                 Text("Профиль совместимости: ${profile.status.label} · ${profile.history.size} набл.", style = MaterialTheme.typography.bodySmall)
+                OutlinedButton(onClick = onExportCompatibility, modifier = Modifier.fillMaxWidth()) {
+                    Text("Экспорт записи совместимости JSON")
+                }
+                Text("Просмотрите JSON перед публикацией: комментарии и идентификаторы в него не включаются.", style = MaterialTheme.typography.bodySmall)
             }
             Spacer(Modifier.height(10.dp))
         }

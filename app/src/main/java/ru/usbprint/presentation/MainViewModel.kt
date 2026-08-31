@@ -18,6 +18,8 @@ import ru.usbprint.domain.logic.PrintSettingsValidator
 import ru.usbprint.domain.logic.SettingsValidation
 import ru.usbprint.domain.model.AppError
 import ru.usbprint.domain.model.BackendId
+import ru.usbprint.domain.model.CompatibilityExportEnvironment
+import ru.usbprint.domain.model.CompatibilityRecordJson
 import ru.usbprint.domain.model.DocumentRef
 import ru.usbprint.domain.model.EffectivePrintCapabilities
 import ru.usbprint.domain.model.ExperimentalPrinterOverride
@@ -263,6 +265,24 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
             checkNotNull(container.appContext.contentResolver.openOutputStream(uri)).bufferedWriter().use { it.write(content) }
             container.log.add("Diagnostics exported as ${if (json) "JSON" else "TXT"}")
         }.onFailure { container.log.add("Diagnostics export failed: ${it.javaClass.simpleName}") }
+    }
+
+    fun exportCompatibilityRecord(uri: Uri) = viewModelScope.launch {
+        val profile = _state.value.verifiedPrinterProfile ?: run {
+            _state.update { it.copy(error = AppError.PROFILE_EXPORT_ERROR) }
+            return@launch
+        }
+        runCatching {
+            val json = CompatibilityRecordJson.encode(
+                profile,
+                CompatibilityExportEnvironment(android.os.Build.VERSION.RELEASE ?: "unknown", android.os.Build.VERSION.SDK_INT)
+            )
+            checkNotNull(container.appContext.contentResolver.openOutputStream(uri)).bufferedWriter().use { it.write(json) }
+            container.log.add("Privacy-safe compatibility record exported")
+        }.onFailure {
+            container.log.add("Compatibility export failed: ${it.javaClass.simpleName}")
+            _state.update { state -> state.copy(error = AppError.PROFILE_EXPORT_ERROR) }
+        }
     }
 
     fun diagnostics(): String {

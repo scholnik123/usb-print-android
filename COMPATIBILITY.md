@@ -25,7 +25,7 @@ The development hardware-test wizard records only an explicit physical observati
 
 After an explicit wizard answer, the development build stores a versioned local profile. It includes app/encoder versions, model and VID/PID, a SHA-256 identifier instead of raw serial/device key, reported languages/IPP formats, tested paper/resolution/color/duplex/backend, result date, and at most 20 historical observations. If a corresponding encoder version or schema changes, the previous evidence is retained and the status becomes `NEEDS_REVALIDATION`.
 
-Local profile persistence does not publish a compatibility claim and does not populate this repository table. Privacy-safe JSON export and explicit user submission remain separate steps, so the table remains empty until a real result is reviewed and submitted.
+Local profile persistence does not publish a compatibility claim and does not populate this repository table. The development build can export a privacy-safe JSON record after the user chooses a destination file. It includes the test facts needed by the GitHub issue but excludes hash/serial/device key, notes, documents, URIs, filenames, and payloads. The table remains empty until a real result is reviewed and explicitly submitted by a user.
 
 | Manufacturer | Model | VID:PID | Protocol | Reported formats | Backend | Paper | Resolution | Color | Duplex | Result | App version |
 |---|---|---|---|---|---|---|---|---|---|---|---|

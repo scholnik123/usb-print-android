@@ -58,7 +58,7 @@ IEEE-1284 parsing is isolated in `protocols/`. PWG Raster, PostScript, PCL 5, an
 
 ### Diagnostics
 
-The in-memory bounded diagnostic log and TXT/JSON export report protocol and capability state without including document content, preview images, or print payloads. Known IEEE-1284 serial fields are redacted.
+The in-memory bounded diagnostic log and TXT/JSON export report protocol and capability state without including document content, preview images, or print payloads. Known IEEE-1284 serial fields are redacted. Compatibility export is a separate schema built only from a saved profile and current Android version; it excludes even the stored identity hash and free-form notes.
 
 ## Print pipeline
 

@@ -18,6 +18,7 @@ Development changes below are not part of the published 1.0.0 APK.
 - Versioned local `VerifiedPrinterProfile` persistence with app/encoder versions, hashed device identity, reported protocols, exact tested settings, result date, and bounded 20-record history
 - Conservative statuses: `UNTESTED`, `USER_CONFIRMED`, `MULTIPLE_TESTS_CONFIRMED`, `PARTIAL`, `FAILED`, and `NEEDS_REVALIDATION`
 - Automatic profile invalidation when a recorded backend encoder version or profile schema no longer matches, without deleting prior observations
+- User-triggered privacy-safe compatibility JSON export with app/Android version, printer model and VID/PID, backend/encoder, reported protocols, tested settings, and physical result
 
 ### Changed
 
@@ -27,7 +28,7 @@ Development changes below are not part of the published 1.0.0 APK.
 
 ### Validation
 
-- 95 JVM tests pass on the development branch; Android lint and debug assembly pass
+- 97 JVM tests pass on the development branch; Android lint and debug assembly pass
 - Hardware-tested printers remain 0; no physical IPP PWG compatibility is claimed
 
 ## 1.0.0 - 2026-08-31
