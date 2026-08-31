@@ -91,6 +91,7 @@ data class PrintSettings(
 
 enum class BackendId(val title: String) {
     IPP_DIRECT("IPP-over-USB Direct"),
+    IPP_PWG("IPP-over-USB PWG Raster"),
     PDF_DIRECT("PDF Direct"),
     PWG_RASTER("PWG Raster"),
     POSTSCRIPT_RASTER("PostScript Raster"),

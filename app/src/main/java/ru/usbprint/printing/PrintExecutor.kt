@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import ru.usbprint.document.DocumentRepository
 import ru.usbprint.domain.model.AppError
+import ru.usbprint.domain.model.BackendId
 import ru.usbprint.domain.model.PrintException
 import ru.usbprint.domain.model.PrintJob
 import ru.usbprint.domain.model.PrintJobStatus
@@ -29,27 +30,30 @@ class PrintExecutor(
     private val usbManager: UsbManager,
     private val printerController: UsbPrinterController,
     private val documents: DocumentRepository,
+    ippPwgSpoolManager: IppPwgSpoolManager,
     private val log: DiagnosticLog
 ) {
     private val cancelled = AtomicBoolean(false)
     private val activeJob = AtomicReference<PrintJob?>(null)
     private val _state = MutableStateFlow(PrintExecutionState())
     val state = _state.asStateFlow()
-    private val backends = mapOf(
-        ru.usbprint.domain.model.BackendId.IPP_DIRECT to IppDirectBackend { status ->
+    private val ippStatusListener: (ru.usbprint.ipp.IppJobStatus) -> Unit = { status ->
             val current = _state.value
             _state.value = current.copy(
                 status = PrintJobStatus.WAITING_STATUS,
                 progress = current.progress.coerceAtLeast(96),
                 detail = status.state?.label
             )
-        },
-        ru.usbprint.domain.model.BackendId.PDF_DIRECT to PdfDirectBackend(),
-        ru.usbprint.domain.model.BackendId.PWG_RASTER to PwgRasterBackend(),
-        ru.usbprint.domain.model.BackendId.POSTSCRIPT_RASTER to PostScriptRasterBackend(),
-        ru.usbprint.domain.model.BackendId.PCL5_RASTER to Pcl5RasterBackend(),
-        ru.usbprint.domain.model.BackendId.ESC_POS to EscPosBackend(),
-        ru.usbprint.domain.model.BackendId.RAW to RawUsbBackend()
+        }
+    private val backends = mapOf(
+        BackendId.IPP_DIRECT to IppDirectBackend(ippStatusListener),
+        BackendId.IPP_PWG to IppPwgBackend(ippPwgSpoolManager, ippStatusListener),
+        BackendId.PDF_DIRECT to PdfDirectBackend(),
+        BackendId.PWG_RASTER to PwgRasterBackend(),
+        BackendId.POSTSCRIPT_RASTER to PostScriptRasterBackend(),
+        BackendId.PCL5_RASTER to Pcl5RasterBackend(),
+        BackendId.ESC_POS to EscPosBackend(),
+        BackendId.RAW to RawUsbBackend()
     )
 
     suspend fun execute(job: PrintJob) = withContext(Dispatchers.IO) {
@@ -59,7 +63,8 @@ class PrintExecutor(
             _state.value = PrintExecutionState(job.id, PrintJobStatus.VALIDATING)
             val device = printerController.deviceFor(job.printer) ?: throw PrintException(AppError.USB_DEVICE_DISCONNECTED)
             if (!usbManager.hasPermission(device)) throw PrintException(AppError.USB_PERMISSION_DENIED)
-            val interfaceId = if (job.backend == ru.usbprint.domain.model.BackendId.IPP_DIRECT) job.printer.ippInterfaceId
+            val isIpp = job.backend == BackendId.IPP_DIRECT || job.backend == BackendId.IPP_PWG
+            val interfaceId = if (isIpp) job.printer.ippInterfaceId
                 ?: throw PrintException(AppError.USB_INTERFACE_NOT_FOUND) else job.printer.interfaceId
             val interfaceToUse = printerController.interfaceFor(device, interfaceId) ?: throw PrintException(AppError.USB_INTERFACE_NOT_FOUND)
             val backend = backends[job.backend] ?: throw PrintException(AppError.PRINTER_NOT_SUPPORTED)
@@ -70,7 +75,7 @@ class PrintExecutor(
                 _state.value = PrintExecutionState(job.id, PrintJobStatus.PREPARING_DOCUMENT, 0)
                 backend.print(job, transport, documents, { progress ->
                     val current = _state.value
-                    val waiting = job.backend == ru.usbprint.domain.model.BackendId.IPP_DIRECT && progress >= 96
+                    val waiting = isIpp && progress >= 96
                     _state.value = PrintExecutionState(
                         job.id,
                         if (waiting) PrintJobStatus.WAITING_STATUS else PrintJobStatus.SENDING,

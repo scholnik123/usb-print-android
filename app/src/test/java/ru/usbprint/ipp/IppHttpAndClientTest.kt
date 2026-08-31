@@ -4,6 +4,7 @@ import java.io.InputStream
 import java.io.ByteArrayInputStream
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -17,6 +18,7 @@ import ru.usbprint.domain.model.Orientation
 import ru.usbprint.domain.model.PaperSize
 import ru.usbprint.domain.model.PrintSettings
 import ru.usbprint.domain.model.PrinterResolution
+import ru.usbprint.usb.UsbTransport
 
 class IppHttpAndClientTest {
     @Test fun encodesRequiredHttp11Headers() {
@@ -118,9 +120,57 @@ class IppHttpAndClientTest {
         assertEquals(AppError.IPP_VERSION_NOT_SUPPORTED, error.error)
     }
 
+    @Test fun usbSessionUsesExactCombinedContentLengthAndPayloadBytes() = runBlocking {
+        val ipp = byteArrayOf(1, 1, 0, 2, 0, 0, 0, 9, 3)
+        val document = "RaS2-pwg".toByteArray()
+        val transport = RecordingIppUsbTransport(successHttpResponse(successResponse(9)))
+
+        IppUsbSession(transport).exchange(ipp, ByteArrayInputStream(document), document.size.toLong())
+
+        val headers = transport.writes.first().toString(StandardCharsets.US_ASCII)
+        assertTrue(headers.contains("Content-Length: ${ipp.size + document.size}\r\n"))
+        assertArrayEquals(ipp + document, transport.writes.drop(1).fold(ByteArray(0)) { all, part -> all + part })
+    }
+
+    @Test fun usbSessionStopsDuringUploadWithoutSecondRequest() = runBlocking {
+        val cancelled = AtomicBoolean(false)
+        val transport = RecordingIppUsbTransport(successHttpResponse(successResponse(1))) { writeCount ->
+            if (writeCount == 3) cancelled.set(true)
+        }
+        val document = ByteArray(32 * 1024)
+
+        val error = runCatching {
+            IppUsbSession(transport).exchange(byteArrayOf(1, 1, 0, 2, 0, 0, 0, 1, 3), ByteArrayInputStream(document), document.size.toLong()) {
+                cancelled.get()
+            }
+        }.exceptionOrNull() as PrintException
+
+        assertEquals(AppError.PRINT_CANCELLED, error.error)
+        assertEquals(3, transport.writes.size)
+    }
+
     private fun successResponse(requestId: Int) = byteArrayOf(
         1, 1, 0, 0,
         (requestId ushr 24).toByte(), (requestId ushr 16).toByte(), (requestId ushr 8).toByte(), requestId.toByte(),
         3
     )
+
+    private fun successHttpResponse(body: ByteArray): ByteArray =
+        ("HTTP/1.1 200 OK\r\nContent-Type: application/ipp\r\nContent-Length: ${body.size}\r\n\r\n").toByteArray() + body
+}
+
+private class RecordingIppUsbTransport(
+    private val response: ByteArray,
+    private val afterWrite: (Int) -> Unit = {}
+) : UsbTransport {
+    val writes = mutableListOf<ByteArray>()
+    override val isConnected = true
+    override suspend fun open() = Unit
+    override suspend fun write(bytes: ByteArray, timeoutMs: Int) {
+        writes += bytes.copyOf()
+        afterWrite(writes.size)
+    }
+    override suspend fun read(maxBytes: Int, timeoutMs: Int): ByteArray = response.copyOf()
+    override suspend fun controlTransfer(requestType: Int, request: Int, value: Int, index: Int, buffer: ByteArray, timeoutMs: Int): Int = 0
+    override fun close() = Unit
 }

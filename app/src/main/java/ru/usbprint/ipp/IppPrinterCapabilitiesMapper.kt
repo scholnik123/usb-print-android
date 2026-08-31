@@ -29,6 +29,8 @@ object IppPrinterCapabilitiesMapper {
         val formats = response.strings("document-format-supported").map(String::lowercase).toSet()
         val mediaKeywords = (response.strings("media-supported") + response.strings("media-ready") + response.strings("media-default")).toSet()
         val resolutions = response.attributes("printer-resolution-supported").mapNotNull(::resolution).toSet()
+        val pwgRasterResolutions = response.attributes("pwg-raster-document-resolution-supported").mapNotNull(::resolution).toSet()
+        val pwgRasterDocumentTypes = response.strings("pwg-raster-document-type-supported").map(String::lowercase).toSet()
         val colorKeywords = response.strings("print-color-mode-supported").map(String::lowercase).toSet()
         val explicitColor = (response.first("color-supported") as? IppValue.BooleanValue)?.value
         val colors = buildSet {
@@ -85,6 +87,8 @@ object IppPrinterCapabilitiesMapper {
             reportedCustomPaperRangeMicrons = customRange?.confirmed(),
             ipp = base.ipp.copy(
                 versionStrings = versions, operationsSupported = operations, documentFormatsSupported = formats,
+                pwgRasterResolutionsSupported = pwgRasterResolutions,
+                pwgRasterDocumentTypesSupported = pwgRasterDocumentTypes,
                 jobCreationAttributesSupported = jobAttributes,
                 printerState = response.int("printer-state"), printerStateReasons = response.strings("printer-state-reasons").toSet(),
                 acceptingJobs = (response.first("printer-is-accepting-jobs") as? IppValue.BooleanValue)?.value,

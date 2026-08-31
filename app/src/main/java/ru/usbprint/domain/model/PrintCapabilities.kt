@@ -60,6 +60,8 @@ data class IppPrinterInfo(
     val versionStrings: Set<String> = emptySet(),
     val operationsSupported: Set<Int> = emptySet(),
     val documentFormatsSupported: Set<String> = emptySet(),
+    val pwgRasterResolutionsSupported: Set<PrinterResolution> = emptySet(),
+    val pwgRasterDocumentTypesSupported: Set<String> = emptySet(),
     val jobCreationAttributesSupported: Set<String> = emptySet(),
     val printerState: Int? = null,
     val printerStateReasons: Set<String> = emptySet(),

@@ -20,6 +20,8 @@ class IppCapabilityMapperTest {
             IppAttribute("operations-supported", listOf(IppValue.EnumValue(2), IppValue.EnumValue(9), IppValue.EnumValue(11))),
             IppAttribute("media-supported", listOf(IppValue.Keyword("iso_a4_210x297mm"), IppValue.Keyword("na_letter_8.5x11in"))),
             IppAttribute("printer-resolution-supported", listOf(IppValue.Resolution(600, 1200, IppValue.Resolution.Units.DPI))),
+            IppAttribute("pwg-raster-document-resolution-supported", listOf(IppValue.Resolution(300, 300, IppValue.Resolution.Units.DPI), IppValue.Resolution(600, 600, IppValue.Resolution.Units.DPI))),
+            IppAttribute("pwg-raster-document-type-supported", listOf(IppValue.Keyword("sgray_8"), IppValue.Keyword("srgb_8"))),
             IppAttribute("print-color-mode-supported", listOf(IppValue.Keyword("color"), IppValue.Keyword("monochrome"))),
             IppAttribute("sides-supported", listOf(IppValue.Keyword("one-sided"), IppValue.Keyword("two-sided-long-edge"))),
             IppAttribute("media-source-supported", listOf(IppValue.Keyword("tray-2"), IppValue.Keyword("manual"))),
@@ -32,6 +34,8 @@ class IppCapabilityMapperTest {
         assertEquals(setOf(PaperSize.A4, PaperSize.LETTER), mapped.reportedPaperSizes!!.value)
         assertEquals(setOf(PrinterResolution(600, 1200)), mapped.reportedResolutions!!.value)
         assertEquals(CapabilitySource.IPP, mapped.reportedResolutions!!.source)
+        assertEquals(setOf(PrinterResolution.DPI_300, PrinterResolution.DPI_600), mapped.ipp.pwgRasterResolutionsSupported)
+        assertEquals(setOf("sgray_8", "srgb_8"), mapped.ipp.pwgRasterDocumentTypesSupported)
         assertTrue(ColorMode.COLOR in mapped.reportedColorModes!!.value)
         assertTrue(DuplexMode.LONG_EDGE in mapped.reportedDuplexModes!!.value)
         assertEquals(setOf("tray-2", "manual"), mapped.reportedMediaSourceOptions!!.value.map { it.rawKeyword }.toSet())

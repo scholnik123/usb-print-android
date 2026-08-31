@@ -54,6 +54,10 @@ object BackendRegistry {
             if (document.kind == DocumentKind.PDF && document.sizeBytes != null && capabilities.ipp.isDiscovered && capabilities.ipp.acceptingJobs != false &&
                 capabilities.ipp.supportsOperation(ru.usbprint.ipp.IppOperation.PRINT_JOB.code) && capabilities.ipp.supportsFormat("application/pdf") &&
                 isIppDirectSafe(settings)) add(BackendId.IPP_DIRECT)
+            if (capabilities.ipp.isDiscovered && capabilities.ipp.acceptingJobs != false &&
+                capabilities.ipp.supportsOperation(ru.usbprint.ipp.IppOperation.PRINT_JOB.code) &&
+                capabilities.ipp.supportsFormat(IPP_PWG_MIME) && document.kind in printableDocumentKinds &&
+                isIppPwgEncodable(capabilities)) add(BackendId.IPP_PWG)
             if (hasLegacyUsbPath) {
                 if (document.kind == DocumentKind.PDF && capabilities.supportsPdf && isPdfDirectSafe(settings)) add(BackendId.PDF_DIRECT)
                 if (capabilities.supportsPwgRaster && document.kind in printableDocumentKinds) add(BackendId.PWG_RASTER)
@@ -72,6 +76,7 @@ object BackendRegistry {
             val selected = available.first()
             val note = when {
                 forced != null && forced in detected -> "Выбран экспериментальный backend: ${forced.title}"
+                selected == BackendId.IPP_PWG -> "IPP PWG Raster: layout и копии кодируются в PWG payload"
                 selected == BackendId.PWG_RASTER -> "PWG Raster: параметры проверяются по доступным возможностям"
                 else -> null
             }
@@ -88,6 +93,15 @@ object BackendRegistry {
             orientations = setOf(Orientation.AUTO, Orientation.PORTRAIT, Orientation.LANDSCAPE),
             colorModes = setOf(ColorMode.COLOR, ColorMode.GRAYSCALE, ColorMode.BLACK_ONLY, ColorMode.MONOCHROME),
             duplexModes = setOf(DuplexMode.OFF, DuplexMode.LONG_EDGE, DuplexMode.SHORT_EDGE),
+            supportedMediaTypes = ru.usbprint.domain.model.MediaType.entries.toSet(),
+            supportedMediaSources = ru.usbprint.domain.model.MediaSource.entries.toSet(),
+            supportedOutputBins = ru.usbprint.domain.model.OutputBin.entries.toSet()
+        )
+        BackendId.IPP_PWG -> rasterDescriptor(
+            id,
+            setOf(ColorMode.COLOR, ColorMode.GRAYSCALE, ColorMode.BLACK_ONLY, ColorMode.MONOCHROME),
+            setOf(PrinterResolution.DPI_300, PrinterResolution.DPI_600)
+        ).copy(
             supportedMediaTypes = ru.usbprint.domain.model.MediaType.entries.toSet(),
             supportedMediaSources = ru.usbprint.domain.model.MediaSource.entries.toSet(),
             supportedOutputBins = ru.usbprint.domain.model.OutputBin.entries.toSet()
@@ -136,11 +150,23 @@ object BackendRegistry {
     ): EffectivePrintCapabilities {
         val backend = descriptorFor(id)
         if (id == BackendId.NONE || backend.copiesRange == null) return EffectivePrintCapabilities.NONE
-        val isIpp = id == BackendId.IPP_DIRECT
+        val isIppDirect = id == BackendId.IPP_DIRECT
+        val isIppPwg = id == BackendId.IPP_PWG
+        val isIpp = isIppDirect || isIppPwg
         val paper = if (isIpp) printer.reportedPaperSizes?.let { intersectOrFallback(it, backend.paperSizes, emptySet(), false) }
             else intersectOrFallback(printer.knownPaperSizes, backend.paperSizes, setOf(override?.forcedPaper ?: PaperSize.A4), override?.forcedPaper != null)
-        val resolutions = if (isIpp) printer.reportedResolutions else intersectOrFallback(printer.knownResolutions, backend.resolutions, setOf(override?.forcedResolution ?: PrinterResolution.DPI_300), override?.forcedResolution != null)
-        val printerColors = printer.reportedColorModes ?: printer.supportsColor?.takeUnless { isIpp }?.let {
+        val pwgResolutions = printer.ipp.pwgRasterResolutionsSupported.takeIf { it.isNotEmpty() }?.let {
+            CapabilityValue(it, CapabilitySource.IPP, CapabilityConfidence.CONFIRMED)
+        } ?: printer.reportedResolutions
+        val resolutions = when {
+            isIppPwg -> intersectOrNull(pwgResolutions, backend.resolutions)
+            isIppDirect -> printer.reportedResolutions
+            else -> intersectOrFallback(printer.knownResolutions, backend.resolutions, setOf(override?.forcedResolution ?: PrinterResolution.DPI_300), override?.forcedResolution != null)
+        }
+        val pwgColors = printer.ipp.pwgRasterDocumentTypesSupported.takeIf { it.isNotEmpty() }?.let {
+            CapabilityValue(pwgColorModes(it), CapabilitySource.IPP, CapabilityConfidence.CONFIRMED)
+        }
+        val printerColors = (if (isIppPwg) pwgColors ?: printer.reportedColorModes else printer.reportedColorModes) ?: printer.supportsColor?.takeUnless { isIpp }?.let {
             CapabilityValue(if (it) setOf(ColorMode.COLOR, ColorMode.GRAYSCALE, ColorMode.BLACK_ONLY) else setOf(ColorMode.GRAYSCALE, ColorMode.BLACK_ONLY), CapabilitySource.IEEE1284, CapabilityConfidence.DERIVED)
         }
         val colors = if (isIpp) intersectOrNull(printerColors, backend.colorModes)
@@ -155,16 +181,19 @@ object BackendRegistry {
 
         return EffectivePrintCapabilities(
             backendId = id,
-            copiesRange = printer.reportedCopiesRange?.let { clipRange(it, backend.copiesRange) }
-                ?: CapabilityValue(if (isIpp) 1..1 else backend.copiesRange, CapabilitySource.BACKEND_DEFAULT, CapabilityConfidence.DEFAULT),
+            copiesRange = when {
+                isIppPwg -> CapabilityValue(backend.copiesRange, CapabilitySource.BACKEND_DEFAULT, CapabilityConfidence.DEFAULT)
+                else -> printer.reportedCopiesRange?.let { clipRange(it, backend.copiesRange) }
+                    ?: CapabilityValue(if (isIppDirect) 1..1 else backend.copiesRange, CapabilitySource.BACKEND_DEFAULT, CapabilityConfidence.DEFAULT)
+            },
             pageSelections = CapabilityValue(
-                if (isIpp && !printer.ipp.pageRangesSupported) setOf(PageSelectionKind.ALL) else backend.pageSelections,
-                if (isIpp && printer.ipp.pageRangesSupported) CapabilitySource.IPP else CapabilitySource.BACKEND_DEFAULT,
-                if (isIpp && printer.ipp.pageRangesSupported) CapabilityConfidence.CONFIRMED else CapabilityConfidence.DEFAULT
+                if (isIppDirect && !printer.ipp.pageRangesSupported) setOf(PageSelectionKind.ALL) else backend.pageSelections,
+                if (isIppDirect && printer.ipp.pageRangesSupported) CapabilitySource.IPP else CapabilitySource.BACKEND_DEFAULT,
+                if (isIppDirect && printer.ipp.pageRangesSupported) CapabilityConfidence.CONFIRMED else CapabilityConfidence.DEFAULT
             ),
             paperSizes = paper,
             customPaperRange = printer.reportedCustomPaperRange?.takeIf { backend.supportsCustomPaper },
-            orientations = if (isIpp) printer.reportedOrientations ?: CapabilityValue(setOf(Orientation.AUTO), CapabilitySource.BACKEND_DEFAULT, CapabilityConfidence.DEFAULT)
+            orientations = if (isIppDirect) printer.reportedOrientations ?: CapabilityValue(setOf(Orientation.AUTO), CapabilitySource.BACKEND_DEFAULT, CapabilityConfidence.DEFAULT)
                 else CapabilityValue(backend.orientations, CapabilitySource.BACKEND_DEFAULT, CapabilityConfidence.DEFAULT),
             colorModes = colors,
             duplexModes = duplex,
@@ -187,7 +216,9 @@ object BackendRegistry {
                 if (!isIpp && printer.knownPaperSizes == null) add("Формат бумаги A4 — безопасное значение backend; принтер его не подтвердил.")
                 if (!isIpp && printer.knownResolutions == null) add("300 DPI — безопасное значение backend; принтер не сообщил своё разрешение.")
                 if (isIpp && printer.reportedPaperSizes == null) add("IPP не сообщил media-supported; выбор формата скрыт.")
-                if (isIpp && printer.reportedResolutions == null) add("IPP не сообщил printer-resolution-supported; выбор DPI скрыт.")
+                if (isIppDirect && printer.reportedResolutions == null) add("IPP не сообщил printer-resolution-supported; выбор DPI скрыт.")
+                if (isIppPwg && resolutions == null) add("IPP не сообщил совместимое PWG Raster resolution; выбор DPI скрыт.")
+                if (isIppPwg && colors == null) add("IPP не сообщил совместимый PWG Raster document type; выбор цвета скрыт.")
                 if (printer.reportedHardwareMargins == null && override?.forcedMargins == null) add("Физические непечатаемые поля принтера неизвестны.")
                 if (id == BackendId.PCL5_RASTER) add("PCL 5 Raster выводит монохромный поток.")
             }
@@ -243,4 +274,23 @@ object BackendRegistry {
             settings.pageOrder == ru.usbprint.domain.model.PageOrder.NORMAL
 
     private val printableDocumentKinds = setOf(DocumentKind.PDF, DocumentKind.IMAGE, DocumentKind.TEXT)
+    private const val IPP_PWG_MIME = "image/pwg-raster"
+
+    private fun isIppPwgEncodable(printer: PrinterCapabilities): Boolean {
+        val effective = effectiveFor(BackendId.IPP_PWG, printer)
+        return effective.resolutions?.value?.isNotEmpty() == true && effective.colorModes?.value?.isNotEmpty() == true
+    }
+
+    private fun pwgColorModes(documentTypes: Set<String>): Set<ColorMode> = buildSet {
+        documentTypes.map(String::lowercase).forEach { type ->
+            when (type) {
+                "srgb_8" -> add(ColorMode.COLOR)
+                "sgray_8" -> add(ColorMode.GRAYSCALE)
+                "black_1" -> {
+                    add(ColorMode.MONOCHROME)
+                    add(ColorMode.BLACK_ONLY)
+                }
+            }
+        }
+    }
 }

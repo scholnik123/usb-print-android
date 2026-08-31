@@ -5,10 +5,13 @@ import ru.usbprint.document.DocumentRepository
 import ru.usbprint.domain.model.AppError
 import ru.usbprint.domain.model.BackendId
 import ru.usbprint.domain.model.DocumentKind
+import ru.usbprint.domain.model.IppPrinterInfo
 import ru.usbprint.domain.model.PrintException
 import ru.usbprint.domain.model.PrintJob
 import ru.usbprint.ipp.IppClient
+import ru.usbprint.ipp.IppJobReference
 import ru.usbprint.ipp.IppJobState
+import ru.usbprint.ipp.IppJobStatus
 import ru.usbprint.ipp.IppOperation
 import ru.usbprint.ipp.IppUsbSession
 import ru.usbprint.usb.UsbTransport
@@ -48,41 +51,114 @@ class IppDirectBackend(private val onJobStatus: (ru.usbprint.ipp.IppJobStatus) -
             )
         }
         onProgress(96)
-
-        if (reference.jobId == null && reference.jobUri == null) {
-            onProgress(100)
-            return
-        }
-        if (!ipp.supportsOperation(IppOperation.GET_JOB_ATTRIBUTES.code)) {
-            if (isCancelled()) throw PrintException(AppError.PRINT_CANCELLED)
-            onProgress(100)
-            return
-        }
-
-        repeat(STATUS_POLLS) {
-            if (isCancelled()) {
-                if (ipp.supportsOperation(IppOperation.CANCEL_JOB.code)) {
-                    runCatching { client.cancelJob(reference) }.getOrElse { throw PrintException(AppError.IPP_JOB_CANCEL_FAILED, it) }
-                }
-                throw PrintException(AppError.PRINT_CANCELLED)
-            }
-            val (_, status) = client.getJobAttributes(reference)
-            onJobStatus(status)
-            when (status.state) {
-                IppJobState.COMPLETED -> { onProgress(100); return }
-                IppJobState.CANCELED -> throw PrintException(AppError.PRINT_CANCELLED)
-                IppJobState.ABORTED -> throw PrintException(AppError.IPP_JOB_REJECTED)
-                else -> Unit
-            }
-            onProgress(97 + it / 2)
-            delay(STATUS_POLL_DELAY_MS)
-        }
-        onProgress(100)
+        monitorIppJob(client, reference, ipp, onProgress, isCancelled, onJobStatus)
     }
 
     private companion object {
         const val PDF_MIME = "application/pdf"
-        const val STATUS_POLLS = 6
-        const val STATUS_POLL_DELAY_MS = 500L
     }
 }
+
+/** Rasterizes locally, spools one bounded PWG document, and submits it exactly once with IPP Print-Job. */
+class IppPwgBackend(
+    private val spoolManager: IppPwgSpoolManager,
+    private val onJobStatus: (IppJobStatus) -> Unit = {}
+) : PrintingBackend {
+    override val id = BackendId.IPP_PWG
+
+    override suspend fun print(
+        job: PrintJob,
+        transport: UsbTransport,
+        documents: DocumentRepository,
+        onProgress: (Int) -> Unit,
+        isCancelled: () -> Boolean
+    ) {
+        if (job.document.kind !in PRINTABLE_KINDS) throw PrintException(AppError.DOCUMENT_NOT_SUPPORTED)
+        val ipp = job.printer.capabilities.ipp
+        if (!ipp.supportsOperation(IppOperation.PRINT_JOB.code)) throw PrintException(AppError.IPP_OPERATION_NOT_SUPPORTED)
+        if (!ipp.supportsFormat(IppPwgJobPipeline.PWG_MIME)) throw PrintException(AppError.IPP_DOCUMENT_FORMAT_NOT_SUPPORTED)
+        if (ipp.acceptingJobs == false) throw PrintException(AppError.IPP_JOB_REJECTED)
+
+        val plan = PwgRasterJobPlanner.plan(job, id)
+        val session = IppUsbSession(transport) { sent, total ->
+            if (total > 0) {
+                val uploadProgress = (sent * 50L / total).toInt().coerceIn(0, 50)
+                onProgress(45 + uploadProgress)
+            }
+        }
+        val client = IppClient(session)
+        val (_, reference) = IppPwgJobPipeline(spoolManager).submit(
+            client = client,
+            jobName = job.document.displayName,
+            settings = job.settings,
+            supportedAttributeNames = ipp.jobCreationAttributesSupported,
+            pageCount = plan.pages.size,
+            producer = PwgSpoolProducer { writeBytes ->
+                PwgRasterDocumentWriter.write(
+                    job = job,
+                    capabilityBackend = id,
+                    documents = documents,
+                    plan = plan,
+                    writeBytes = writeBytes,
+                    onPageCompleted = { completed, total ->
+                        onProgress((completed * 45 / total).coerceIn(1, 45))
+                    },
+                    isCancelled = isCancelled
+                )
+            },
+            isCancelled = isCancelled
+        )
+        onProgress(96)
+        monitorIppJob(client, reference, ipp, onProgress, isCancelled, onJobStatus)
+    }
+
+    private companion object {
+        val PRINTABLE_KINDS = setOf(DocumentKind.PDF, DocumentKind.IMAGE, DocumentKind.TEXT)
+    }
+}
+
+private suspend fun monitorIppJob(
+    client: IppClient,
+    reference: IppJobReference,
+    ipp: IppPrinterInfo,
+    onProgress: (Int) -> Unit,
+    isCancelled: () -> Boolean,
+    onJobStatus: (IppJobStatus) -> Unit
+) {
+    if (reference.jobId == null && reference.jobUri == null) {
+        onProgress(100)
+        return
+    }
+    if (!ipp.supportsOperation(IppOperation.GET_JOB_ATTRIBUTES.code)) {
+        if (isCancelled()) throw PrintException(AppError.PRINT_CANCELLED)
+        onProgress(100)
+        return
+    }
+
+    repeat(STATUS_POLLS) {
+        if (isCancelled()) {
+            if (ipp.supportsOperation(IppOperation.CANCEL_JOB.code)) {
+                runCatching { client.cancelJob(reference) }
+                    .getOrElse { throw PrintException(AppError.IPP_JOB_CANCEL_FAILED, it) }
+            }
+            throw PrintException(AppError.PRINT_CANCELLED)
+        }
+        val (_, status) = client.getJobAttributes(reference)
+        onJobStatus(status)
+        when (status.state) {
+            IppJobState.COMPLETED -> {
+                onProgress(100)
+                return
+            }
+            IppJobState.CANCELED -> throw PrintException(AppError.PRINT_CANCELLED)
+            IppJobState.ABORTED -> throw PrintException(AppError.IPP_JOB_REJECTED)
+            else -> Unit
+        }
+        onProgress(97 + it / 2)
+        delay(STATUS_POLL_DELAY_MS)
+    }
+    onProgress(100)
+}
+
+private const val STATUS_POLLS = 6
+private const val STATUS_POLL_DELAY_MS = 500L

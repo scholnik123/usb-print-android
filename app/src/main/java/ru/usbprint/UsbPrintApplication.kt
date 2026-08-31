@@ -11,6 +11,7 @@ import ru.usbprint.document.DocumentRepository
 import ru.usbprint.printing.PrintExecutor
 import ru.usbprint.printing.PrintJobStore
 import ru.usbprint.printing.HardwareTestPageFactory
+import ru.usbprint.printing.IppPwgSpoolManager
 import ru.usbprint.preferences.PrintPreferencesRepository
 import ru.usbprint.usb.PrinterConnectionEvent
 import ru.usbprint.usb.UsbPrinterController
@@ -32,7 +33,8 @@ class AppContainer(val appContext: Context) {
     val usbManager: UsbManager = checkNotNull(appContext.getSystemService(Context.USB_SERVICE) as? UsbManager)
     val documents = DocumentRepository(appContext.contentResolver)
     val printerController = UsbPrinterController(appContext.applicationContext, usbManager, log)
-    val printExecutor = PrintExecutor(usbManager, printerController, documents, log)
+    val ippPwgSpoolManager = IppPwgSpoolManager(appContext.cacheDir)
+    val printExecutor = PrintExecutor(usbManager, printerController, documents, ippPwgSpoolManager, log)
     val printJobStore = PrintJobStore()
     val hardwareTestPage = HardwareTestPageFactory(appContext)
     val preferences = PrintPreferencesRepository(appContext)
