@@ -3,6 +3,7 @@
 package ru.usbprint
 
 import android.content.Intent
+import android.content.res.Configuration
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -11,9 +12,12 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.activity.viewModels
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -23,6 +27,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.safeDrawing
@@ -64,15 +70,19 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ru.usbprint.domain.logic.PageRangeParser
+import ru.usbprint.domain.logic.BackendDecision
 import ru.usbprint.domain.logic.BackendRegistry
 import ru.usbprint.domain.logic.PrintPresetResolver
 import ru.usbprint.domain.model.BackendId
@@ -80,6 +90,8 @@ import ru.usbprint.domain.model.ColorMode
 import ru.usbprint.domain.model.ContentPosition
 import ru.usbprint.domain.model.CustomPaperSizeMicrons
 import ru.usbprint.domain.model.DuplexMode
+import ru.usbprint.domain.model.DocumentKind
+import ru.usbprint.domain.model.DocumentRef
 import ru.usbprint.domain.model.Orientation
 import ru.usbprint.domain.model.PageSelection
 import ru.usbprint.domain.model.PaperSize
@@ -94,6 +106,7 @@ import ru.usbprint.domain.model.HardwarePrintIssue
 import ru.usbprint.domain.model.HardwareTestOutcome
 import ru.usbprint.domain.model.Microns
 import ru.usbprint.domain.model.PrinterResolution
+import ru.usbprint.domain.model.PrinterCapabilities
 import ru.usbprint.domain.model.PrinterRef
 import ru.usbprint.domain.model.PrinterKeywordOption
 import ru.usbprint.domain.model.ScalingMode
@@ -126,7 +139,7 @@ class MainActivity : ComponentActivity() {
             handleIncomingIntent(intent)
         }
         setContent {
-            UsbPrintTheme(darkTheme = androidx.compose.foundation.isSystemInDarkTheme()) {
+            UsbPrintTheme(darkTheme = isSystemInDarkTheme()) {
                 UsbPrintScreen(
                     viewModel = viewModel,
                     onSelect = { openDocument.launch(SUPPORTED_MIME_TYPES) },
@@ -168,43 +181,20 @@ private fun UsbPrintScreen(
     var showDiagnostics by rememberSaveable { mutableStateOf(false) }
     var errorMessage by rememberSaveable { mutableStateOf<String?>(null) }
     LaunchedEffect(state.error) { state.error?.let { errorMessage = it.userMessage; viewModel.clearError() } }
-    Scaffold(
-        topBar = { TopAppBar(title = { Text("USB Print") }, actions = { IconButton(onClick = { showDiagnostics = true }) { Icon(Icons.Default.Usb, "Информация о принтере") } }, colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)) },
-        contentWindowInsets = WindowInsets.safeDrawing
-    ) { padding ->
-        AdaptiveContentContainer(
-            Modifier
-                .padding(padding)
-                .consumeWindowInsets(padding)
-                .imePadding()
-        ) { widthClass ->
-            Spacer(Modifier.height(2.dp))
-            PrinterCard(state, viewModel::requestUsbPermission, viewModel::refreshPrinter, viewModel::selectPrinter, widthClass == AdaptiveWidthClass.COMPACT)
-            DocumentCard(state, onSelect, viewModel::loadHardwareTestPage)
-            if (state.document != null) {
-                OutlinedButton(onClick = { showSettings = true }, modifier = Modifier.fillMaxWidth(), enabled = !isJobRunning(state.jobStatus)) { Text("Настройки печати") }
-                Text("Режим печати: ${state.backend.selected.title}", style = MaterialTheme.typography.bodyMedium, color = if (state.backend.selected == BackendId.NONE) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
-                state.backend.reason?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-            }
-            PrintAction(state, viewModel::print, viewModel::cancelPrint)
-            if (state.hardwareTestAwaitingResult) {
-                OutlinedButton(onClick = viewModel::openHardwareTestWizard, modifier = Modifier.fillMaxWidth()) {
-                    Text("Оценить результат тестовой печати")
-                }
-            }
-            state.lastHardwareTestObservation?.let { observation ->
-                Text("Последняя оценка теста: ${observation.outcome.label}", style = MaterialTheme.typography.bodySmall)
-            }
-            state.verifiedPrinterProfile?.let { profile ->
-                Text("Профиль совместимости: ${profile.status.label} · ${profile.history.size} набл.", style = MaterialTheme.typography.bodySmall)
-                OutlinedButton(onClick = onExportCompatibility, modifier = Modifier.fillMaxWidth()) {
-                    Text("Экспорт записи совместимости JSON")
-                }
-                Text("Просмотрите JSON перед публикацией: комментарии и идентификаторы в него не включаются.", style = MaterialTheme.typography.bodySmall)
-            }
-            Spacer(Modifier.height(10.dp))
-        }
-    }
+    MainScreenContent(
+        state = state,
+        onSelect = onSelect,
+        onPermission = viewModel::requestUsbPermission,
+        onRefresh = viewModel::refreshPrinter,
+        onSelectPrinter = viewModel::selectPrinter,
+        onHardwareTest = viewModel::loadHardwareTestPage,
+        onOpenSettings = { showSettings = true },
+        onPrint = viewModel::print,
+        onCancel = viewModel::cancelPrint,
+        onOpenHardwareWizard = viewModel::openHardwareTestWizard,
+        onExportCompatibility = onExportCompatibility,
+        onOpenDiagnostics = { showDiagnostics = true }
+    )
     if (showSettings) PrintSettingsDialog(
         initial = state.settings, pageCount = state.document?.pageCount, capabilities = state.effectiveCapabilities,
         compatibleBackends = state.backend.compatible, customPresets = state.customPresets, advancedMode = state.advancedMode, initialOverride = state.printerOverride,
@@ -218,6 +208,136 @@ private fun UsbPrintScreen(
         onDismiss = viewModel::dismissHardwareTestWizard,
         onSave = viewModel::recordHardwareTestObservation
     )
+}
+
+/** Pure screen surface shared by production, previews, and responsive UI tests. */
+@Composable
+internal fun MainScreenContent(
+    state: MainUiState,
+    onSelect: () -> Unit = {},
+    onPermission: () -> Unit = {},
+    onRefresh: () -> Unit = {},
+    onSelectPrinter: (String) -> Unit = {},
+    onHardwareTest: () -> Unit = {},
+    onOpenSettings: () -> Unit = {},
+    onPrint: () -> Unit = {},
+    onCancel: () -> Unit = {},
+    onOpenHardwareWizard: () -> Unit = {},
+    onExportCompatibility: () -> Unit = {},
+    onOpenDiagnostics: () -> Unit = {}
+) {
+    Scaffold(
+        topBar = { TopAppBar(title = { Text("USB Print") }, actions = { IconButton(onClick = onOpenDiagnostics) { Icon(Icons.Default.Usb, "Информация о принтере") } }, colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)) },
+        contentWindowInsets = WindowInsets.safeDrawing
+    ) { padding ->
+        AdaptiveContentContainer(
+            Modifier
+                .padding(padding)
+                .consumeWindowInsets(padding)
+                .imePadding()
+        ) { widthClass ->
+            val twoPane = widthClass == AdaptiveWidthClass.EXPANDED && LocalDensity.current.fontScale < 1.5f
+            Spacer(Modifier.height(2.dp))
+            if (twoPane) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(20.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    MainSourcePane(
+                        state = state,
+                        onPermission = onPermission,
+                        onRefresh = onRefresh,
+                        onSelectPrinter = onSelectPrinter,
+                        onSelect = onSelect,
+                        onHardwareTest = onHardwareTest,
+                        stackPrinterAction = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    MainActionPane(
+                        state = state,
+                        onOpenSettings = onOpenSettings,
+                        onPrint = onPrint,
+                        onCancel = onCancel,
+                        onOpenHardwareWizard = onOpenHardwareWizard,
+                        onExportCompatibility = onExportCompatibility,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            } else {
+                MainSourcePane(
+                    state = state,
+                    onPermission = onPermission,
+                    onRefresh = onRefresh,
+                    onSelectPrinter = onSelectPrinter,
+                    onSelect = onSelect,
+                    onHardwareTest = onHardwareTest,
+                    stackPrinterAction = widthClass == AdaptiveWidthClass.COMPACT
+                )
+                MainActionPane(
+                    state = state,
+                    onOpenSettings = onOpenSettings,
+                    onPrint = onPrint,
+                    onCancel = onCancel,
+                    onOpenHardwareWizard = onOpenHardwareWizard,
+                    onExportCompatibility = onExportCompatibility
+                )
+            }
+            Spacer(Modifier.height(10.dp))
+        }
+    }
+}
+
+@Composable
+private fun MainSourcePane(
+    state: MainUiState,
+    onPermission: () -> Unit,
+    onRefresh: () -> Unit,
+    onSelectPrinter: (String) -> Unit,
+    onSelect: () -> Unit,
+    onHardwareTest: () -> Unit,
+    stackPrinterAction: Boolean,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        PrinterCard(state, onPermission, onRefresh, onSelectPrinter, stackPrinterAction)
+        DocumentCard(state, onSelect, onHardwareTest)
+    }
+}
+
+@Composable
+private fun MainActionPane(
+    state: MainUiState,
+    onOpenSettings: () -> Unit,
+    onPrint: () -> Unit,
+    onCancel: () -> Unit,
+    onOpenHardwareWizard: () -> Unit,
+    onExportCompatibility: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        if (state.document != null) {
+            OutlinedButton(onClick = onOpenSettings, modifier = Modifier.fillMaxWidth(), enabled = !isJobRunning(state.jobStatus)) { Text("Настройки печати") }
+            Text("Режим печати: ${state.backend.selected.title}", style = MaterialTheme.typography.bodyMedium, color = if (state.backend.selected == BackendId.NONE) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
+            state.backend.reason?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+        }
+        PrintAction(state, onPrint, onCancel)
+        if (state.hardwareTestAwaitingResult) {
+            OutlinedButton(onClick = onOpenHardwareWizard, modifier = Modifier.fillMaxWidth()) {
+                Text("Оценить результат тестовой печати")
+            }
+        }
+        state.lastHardwareTestObservation?.let { observation ->
+            Text("Последняя оценка теста: ${observation.outcome.label}", style = MaterialTheme.typography.bodySmall)
+        }
+        state.verifiedPrinterProfile?.let { profile ->
+            Text("Профиль совместимости: ${profile.status.label} · ${profile.history.size} набл.", style = MaterialTheme.typography.bodySmall)
+            OutlinedButton(onClick = onExportCompatibility, modifier = Modifier.fillMaxWidth()) {
+                Text("Экспорт записи совместимости JSON")
+            }
+            Text("Просмотрите JSON перед публикацией: комментарии и идентификаторы в него не включаются.", style = MaterialTheme.typography.bodySmall)
+        }
+    }
 }
 
 @Composable
@@ -405,9 +525,34 @@ private fun availablePrinters(state: MainUiState): List<PrinterRef> = when (val 
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) { Icon(Icons.Default.Description, null); Text("Документ", style = MaterialTheme.typography.titleMedium) }
             if (state.isLoadingDocument) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) { CircularProgressIndicator(Modifier.size(20.dp)); Text("Подготовка предварительного просмотра…") }
             state.document?.let { document ->
-                Text(document.displayName, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(document.displayName, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text("${document.mimeType} · ${document.sizeBytes?.let(::formatBytes) ?: "размер неизвестен"} · ${document.pageCount ?: 1} стр.", style = MaterialTheme.typography.bodySmall)
-                state.preview?.let { bitmap -> Image(bitmap.asImageBitmap(), "Предварительный просмотр первой страницы", modifier = Modifier.fillMaxWidth().height(220.dp)) }
+                state.preview?.let { bitmap ->
+                    val previewRatio = (bitmap.width.toFloat() / bitmap.height.coerceAtLeast(1)).coerceIn(0.55f, 1.8f)
+                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        Image(
+                            bitmap = bitmap.asImageBitmap(),
+                            contentDescription = "Предварительный просмотр первой страницы",
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.widthIn(max = 360.dp).fillMaxWidth().aspectRatio(previewRatio)
+                        )
+                    }
+                } ?: if (!state.isLoadingDocument) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 160.dp, max = 220.dp)
+                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "Предварительный просмотр недоступен",
+                            modifier = Modifier.padding(16.dp),
+                            textAlign = TextAlign.Center,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                } else Unit
             } ?: Text("Выберите PDF, изображение или TXT-файл.", style = MaterialTheme.typography.bodyMedium)
             ElevatedButton(onClick = onSelect, modifier = Modifier.fillMaxWidth(), enabled = !state.isLoadingDocument) { Text("Выбрать файл") }
             OutlinedButton(onClick = onHardwareTest, modifier = Modifier.fillMaxWidth(), enabled = !state.isLoadingDocument) { Text("Создать тестовую страницу A4") }
@@ -429,6 +574,57 @@ private fun availablePrinters(state: MainUiState): List<PrinterRef> = when (val 
         if (state.jobStatus == PrintJobStatus.SENT) Text(state.jobDetail?.let { "Последний статус IPP: $it" } ?: "Задание передано принтеру.", color = MaterialTheme.colorScheme.primary)
     }
 }
+
+private fun previewMainUiState(): MainUiState {
+    val printer = PrinterRef(
+        deviceKey = "/dev/bus/usb/001/002",
+        capabilities = PrinterCapabilities(
+            manufacturer = "Example Office",
+            model = "Color Laser Printer With A Long Model Name 4200",
+            vendorId = 0x1234,
+            productId = 0x5678,
+            usbDeviceId = 2
+        ),
+        interfaceId = 0
+    )
+    return MainUiState(
+        usb = UsbPrinterState.Ready(printer),
+        document = DocumentRef(
+            uri = "content://preview/document",
+            displayName = "Очень длинное имя документа для проверки переноса и адаптивной компоновки.pdf",
+            mimeType = "application/pdf",
+            kind = DocumentKind.PDF,
+            sizeBytes = 2_540_321,
+            pageCount = 12
+        ),
+        backend = BackendDecision(BackendId.PCL5_RASTER, listOf(BackendId.PCL5_RASTER))
+    )
+}
+
+@Composable
+private fun ResponsiveMainPreview() {
+    UsbPrintTheme(darkTheme = isSystemInDarkTheme()) {
+        MainScreenContent(state = previewMainUiState())
+    }
+}
+
+@Preview(name = "Compact 320dp", widthDp = 320, heightDp = 640, showBackground = true)
+@Composable private fun CompactMainPreview() = ResponsiveMainPreview()
+
+@Preview(name = "Compact landscape", widthDp = 640, heightDp = 360, showBackground = true)
+@Composable private fun CompactLandscapeMainPreview() = ResponsiveMainPreview()
+
+@Preview(name = "Medium window", widthDp = 720, heightDp = 900, showBackground = true)
+@Composable private fun MediumMainPreview() = ResponsiveMainPreview()
+
+@Preview(name = "Expanded two-pane", widthDp = 1024, heightDp = 720, showBackground = true)
+@Composable private fun ExpandedMainPreview() = ResponsiveMainPreview()
+
+@Preview(name = "Dark theme", widthDp = 360, heightDp = 720, uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
+@Composable private fun DarkMainPreview() = ResponsiveMainPreview()
+
+@Preview(name = "Large font 2.0", widthDp = 360, heightDp = 720, fontScale = 2f, showBackground = true)
+@Composable private fun LargeFontMainPreview() = ResponsiveMainPreview()
 
 @Composable private fun PrintSettingsDialog(
     initial: PrintSettings,
