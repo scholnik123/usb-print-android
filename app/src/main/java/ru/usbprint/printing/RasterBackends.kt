@@ -11,19 +11,24 @@ import ru.usbprint.domain.model.ColorMode
 import ru.usbprint.domain.model.DuplexMode
 import ru.usbprint.domain.model.PrintException
 import ru.usbprint.domain.model.PrintJob
+import ru.usbprint.domain.model.PrintJobStatus
 import ru.usbprint.usb.UsbTransport
 
 class PwgRasterBackend : PrintingBackend {
     override val id = BackendId.PWG_RASTER
 
-    override suspend fun print(job: PrintJob, transport: UsbTransport, documents: DocumentRepository, onProgress: (Int) -> Unit, isCancelled: () -> Boolean) {
+    override suspend fun print(job: PrintJob, transport: UsbTransport, documents: DocumentRepository, onProgress: (PrintProgressUpdate) -> Unit, isCancelled: () -> Boolean, metrics: PrintMetricsSink) {
+        val plan = PwgRasterJobPlanner.plan(job, id)
+        onProgress(PrintProgressUpdate.sheets(PrintJobStatus.SENDING, 0, plan.physicalSheetCount))
         PwgRasterDocumentWriter.write(
             job = job,
             capabilityBackend = id,
             documents = documents,
+            plan = plan,
             writeBytes = transport::write,
-            onPageCompleted = { completed, total -> onProgress((completed * 100 / total).coerceIn(1, 100)) },
-            isCancelled = isCancelled
+            onPageCompleted = { completed, total -> onProgress(PrintProgressUpdate.sheets(PrintJobStatus.SENDING, completed, total)) },
+            isCancelled = isCancelled,
+            metrics = metrics
         )
     }
 }
@@ -32,34 +37,44 @@ class PwgRasterBackend : PrintingBackend {
 class PostScriptRasterBackend : PrintingBackend {
     override val id = BackendId.POSTSCRIPT_RASTER
 
-    override suspend fun print(job: PrintJob, transport: UsbTransport, documents: DocumentRepository, onProgress: (Int) -> Unit, isCancelled: () -> Boolean) {
-        transport.write(PostScriptRasterEncoder.prolog())
+    override suspend fun print(job: PrintJob, transport: UsbTransport, documents: DocumentRepository, onProgress: (PrintProgressUpdate) -> Unit, isCancelled: () -> Boolean, metrics: PrintMetricsSink) {
+        suspend fun emit(bytes: ByteArray) { metrics.addGeneratedBytes(bytes.size.toLong()); transport.write(bytes) }
+        emit(metrics.measureEncode(PostScriptRasterEncoder::prolog))
         var physicalSheets = 0
         documents.createRenderer(job.document).use { renderer ->
             val sheets = plannedSheets(job, renderer, allowedDpi(job, id), id)
             val total = sheets.size
             physicalSheets = total
             var completed = 0
+            onProgress(PrintProgressUpdate.sheets(PrintJobStatus.SENDING, 0, total))
             sheets.forEach { sheet ->
                     ensureNotCancelled(isCancelled)
                     val duplex = job.settings.duplexMode != DuplexMode.OFF && job.printer.capabilities.supportsDuplex == true
                     val pageNumber = completed + 1
                     val colorMode = if (job.settings.colorMode == ColorMode.COLOR) RasterColorMode.RGB else RasterColorMode.GRAYSCALE
-                    transport.write(PostScriptRasterEncoder.beginPage(sheet.layout, pageNumber, duplex, job.settings.duplexMode == DuplexMode.SHORT_EDGE, colorMode))
-                    NUpRasterPageSource(renderer, sheet, colorMode).use { source ->
+                    emit(metrics.measureEncode { PostScriptRasterEncoder.beginPage(sheet.layout, pageNumber, duplex, job.settings.duplexMode == DuplexMode.SHORT_EDGE, colorMode) })
+                    NUpRasterPageSource(renderer, sheet, colorMode, metrics).use { source ->
                         val row = ByteArray(sheet.layout.widthPx * if (colorMode == RasterColorMode.RGB) 3 else 1)
-                        for (y in 0 until sheet.layout.heightPx) {
-                            ensureNotCancelled(isCancelled)
-                            source.renderRow(y, row)
-                            transport.write(PostScriptRasterEncoder.asciiHex(row))
+                        metrics.allocateRasterBuffer(row.size.toLong())
+                        try {
+                            for (y in 0 until sheet.layout.heightPx) {
+                                ensureNotCancelled(isCancelled)
+                                metrics.measureRender { source.renderRow(y, row) }
+                                val encoded = metrics.measureEncode { PostScriptRasterEncoder.asciiHex(row) }
+                                metrics.allocateRasterBuffer(encoded.size.toLong())
+                                try { emit(encoded) } finally { metrics.releaseRasterBuffer(encoded.size.toLong()) }
+                            }
+                        } finally {
+                            metrics.releaseRasterBuffer(row.size.toLong())
                         }
                     }
-                    transport.write(PostScriptRasterEncoder.endPage())
+                    emit(metrics.measureEncode(PostScriptRasterEncoder::endPage))
+                    metrics.recordPhysicalSheet()
                     completed++
-                    onProgress((completed * 100 / total).coerceIn(1, 100))
+                    onProgress(PrintProgressUpdate.sheets(PrintJobStatus.SENDING, completed, total))
             }
         }
-        transport.write(PostScriptRasterEncoder.trailer(physicalSheets))
+        emit(metrics.measureEncode { PostScriptRasterEncoder.trailer(physicalSheets) })
     }
 }
 
@@ -67,29 +82,37 @@ class PostScriptRasterBackend : PrintingBackend {
 class Pcl5RasterBackend : PrintingBackend {
     override val id = BackendId.PCL5_RASTER
 
-    override suspend fun print(job: PrintJob, transport: UsbTransport, documents: DocumentRepository, onProgress: (Int) -> Unit, isCancelled: () -> Boolean) {
-        transport.write(Pcl5JobEncoder.reset())
+    override suspend fun print(job: PrintJob, transport: UsbTransport, documents: DocumentRepository, onProgress: (PrintProgressUpdate) -> Unit, isCancelled: () -> Boolean, metrics: PrintMetricsSink) {
+        suspend fun emit(bytes: ByteArray) { metrics.addGeneratedBytes(bytes.size.toLong()); transport.write(bytes) }
+        emit(metrics.measureEncode(Pcl5JobEncoder::reset))
         documents.createRenderer(job.document).use { renderer ->
             val dpi = allowedDpi(job, id)
             val sheets = plannedSheets(job, renderer, dpi, id)
             val total = sheets.size
             var completed = 0
+            onProgress(PrintProgressUpdate.sheets(PrintJobStatus.SENDING, 0, total))
             sheets.forEach { sheet ->
                     ensureNotCancelled(isCancelled)
                     val duplex = if (job.printer.capabilities.supportsDuplex == true) job.settings.duplexMode else DuplexMode.OFF
-                    transport.write(Pcl5JobEncoder.beginPage(sheet.layout, dpi, duplex))
-                    NUpRasterPageSource(renderer, sheet, RasterColorMode.MONOCHROME).use { source ->
+                    emit(metrics.measureEncode { Pcl5JobEncoder.beginPage(sheet.layout, dpi, duplex) })
+                    NUpRasterPageSource(renderer, sheet, RasterColorMode.MONOCHROME, metrics).use { source ->
                         val row = ByteArray((sheet.layout.widthPx + 7) / 8)
-                        for (y in 0 until sheet.layout.heightPx) {
-                            ensureNotCancelled(isCancelled)
-                            source.renderRow(y, row)
-                            transport.write(Pcl5JobEncoder.row(row.size))
-                            transport.write(row)
+                        metrics.allocateRasterBuffer(row.size.toLong())
+                        try {
+                            for (y in 0 until sheet.layout.heightPx) {
+                                ensureNotCancelled(isCancelled)
+                                metrics.measureRender { source.renderRow(y, row) }
+                                emit(metrics.measureEncode { Pcl5JobEncoder.row(row.size) })
+                                emit(row)
+                            }
+                        } finally {
+                            metrics.releaseRasterBuffer(row.size.toLong())
                         }
                     }
-                    transport.write(Pcl5JobEncoder.endPage())
+                    emit(metrics.measureEncode(Pcl5JobEncoder::endPage))
+                    metrics.recordPhysicalSheet()
                     completed++
-                    onProgress((completed * 100 / total).coerceIn(1, 100))
+                    onProgress(PrintProgressUpdate.sheets(PrintJobStatus.SENDING, completed, total))
             }
         }
     }

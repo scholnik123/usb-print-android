@@ -25,7 +25,7 @@ Download the current APK from [GitHub Releases](https://github.com/scholnik123/u
 
 The first public APK is debug-signed and intended for direct installation and testing. A production signing key is not included in this repository.
 
-> **Development branch:** `codex/development` contains IPP PWG Raster Print-Job, explicit hardware-result profiles/export, software 2-up/4-up, and confirmed IPP custom-paper sizes completed after 1.0.0. These changes are not part of the published 1.0.0 APK and have not yet been validated on a physical printer.
+> **Development branch:** `codex/development` contains IPP PWG Raster Print-Job, explicit hardware-result profiles/export, software 2-up/4-up, confirmed IPP custom-paper sizes, and local job metrics with real progress completed after 1.0.0. These changes are not part of the published 1.0.0 APK and have not yet been validated on a physical printer.
 
 ## Features
 
@@ -37,6 +37,8 @@ The first public APK is debug-signed and intended for direct installation and te
 - PDF Direct, PWG Raster, PostScript Raster, PCL 5 Raster, ESC/POS, and raw printer-language passthrough
 - PDF, image, and UTF-8 text rendering
 - Foreground print jobs with notification cancellation
+- Real byte/page/physical-sheet progress where the backend knows a total; indeterminate progress otherwise
+- Bounded local per-job timing, byte, page, sheet, and peak-raster-buffer metrics for diagnostics
 - Local presets, printer-specific experimental overrides, calibration-page result wizard, versioned local printer profiles, and privacy-safe compatibility JSON export
 - No cloud, account, advertising, analytics, Firebase, or INTERNET permission
 
@@ -162,6 +164,12 @@ After an explicit answer, the development build stores a local versioned profile
 
 A saved profile can be exported as `USB-Print-compatibility.json` for review and attachment to the GitHub compatibility issue. The public record contains app and Android versions, printer model and VID/PID, backend/encoder version, reported languages/formats, tested settings, status/outcome/issues, date, and observation count. It excludes the stored identity hash, raw serial/device key, free-form notes, document name/content/URI, and print payload.
 
+## Progress and local metrics
+
+The development branch reports only measurable work. Direct and IPP uploads show bytes when an exact total is known; raster backends show completed physical sheets; ESC/POS image output shows completed logical pages. A phase with no trustworthy total uses an indeterminate indicator instead of a simulated percentage. `100%` or `SENT` still means that the application completed its local transfer workflow, not that paper physically exited the printer.
+
+For diagnostics, each accepted job records local prepare, render, encode, completed USB-write, and IPP-wait time; generated and successfully written bytes; rendered logical pages; completed physical sheets; and the highest tracked raster-buffer allocation. Only the last 20 jobs in the current application process are retained. The general diagnostic log is limited to 200 entries and 500 characters per entry. These records are not telemetry, are not uploaded, reset with the process, and do not contain document contents, payload bytes, preview images, filenames, or document URIs.
+
 ## Privacy
 
 - No account, analytics, Firebase, advertising, or cloud upload
@@ -196,7 +204,7 @@ The APK is generated at `app/build/outputs/apk/debug/app-debug.apk`.
 
 ## Validation
 
-The first public release passes 61 JVM tests covering IPP wire format and malformed input, HTTP framing, capability mapping, USB discovery, PWG/PCL/PostScript invariants, page planning, and raster memory calculations. The development branch passes 127 JVM tests after adding exact-length IPP PWG coverage, the hardware-test workflow, versioned profiles/export, deterministic N-up checks, and confirmed custom-paper conversion/validation/wire-format coverage.
+The first public release passes 61 JVM tests covering IPP wire format and malformed input, HTTP framing, capability mapping, USB discovery, PWG/PCL/PostScript invariants, page planning, and raster memory calculations. The development branch passes 133 JVM tests after adding exact-length IPP PWG coverage, the hardware-test workflow, versioned profiles/export, deterministic N-up checks, confirmed custom-paper conversion/validation/wire-format coverage, and bounded local metrics/progress checks.
 
 Internal golden/invariant tests are not equivalent to external validation through CUPS, Ghostscript, or ipptool, and they are not a substitute for physical printer testing. See [VALIDATION_REPORT.md](VALIDATION_REPORT.md) and [docs/TESTING.md](docs/TESTING.md).
 
@@ -209,6 +217,8 @@ Internal golden/invariant tests are not equivalent to external validation throug
 - PCLm, PCL XL/PCL6, URF, and vendor-specific protocols are not implemented.
 - Software N-up is limited to 1, 2, or 4 logical pages and the four composing raster backends; connected-device preview/printing validation is still not run.
 - Development custom paper is limited to IPP Direct and IPP PWG, requires a printer-confirmed range plus writable `media-col/media-size`, and has not been validated on a physical printer.
+- Progress describes application-side bytes/pages/sheets and cannot establish physical print completion. Failed USB writes expose elapsed time but the transport API cannot report a partially accepted prefix from the failing call.
+- Job-metric history is intentionally in-memory and limited to the latest 20 jobs; it is cleared when the application process restarts.
 - Compatibility JSON must still be reviewed and submitted by the user; the application never publishes it automatically.
 - Office formats require conversion to PDF.
 - The release APK is debug-signed, not production-signed.
@@ -224,7 +234,6 @@ See [COMPATIBILITY.md](COMPATIBILITY.md) for evidence levels and the reporting t
 - Physical printer validation and evidence-backed compatibility reports
 - Physical-printer validation of the development IPP PWG Raster path
 - Profile history/review management UI
-- Local job metrics, real progress reporting, and bounded diagnostic history
 - Large-document and custom-media stress hardening
 - PCLm and expanded standards-based compatibility
 

@@ -31,6 +31,7 @@ class IppPwgJobPipelineTest {
     @Test fun submitsExactPwgBytesWithMimeAndWithoutDuplicatedSoftwareSettings() = withTempDirectory { cache -> runBlocking {
         val payload = "RaS2-pwg-payload".toByteArray()
         val session = CapturingSession()
+        var readyLength = -1L
         val settings = PrintSettings(
             copies = 3,
             pageSelection = PageSelection.Ranges("2-3", listOf(2..3)),
@@ -46,11 +47,13 @@ class IppPwgJobPipelineTest {
             producer = PwgSpoolProducer { write ->
                 write(payload.copyOfRange(0, 5))
                 write(payload.copyOfRange(5, payload.size))
-            }
+            },
+            onSpoolReady = { readyLength = it }
         )
 
         assertEquals(1, session.exchangeCalls)
         assertEquals(payload.size.toLong(), session.documentLength)
+        assertEquals(payload.size.toLong(), readyLength)
         assertArrayEquals(payload, session.documentBytes)
         val request = IppDecoder().decodeResponse(session.ippBytes)
         assertEquals(IppValue.MimeMediaType(IppPwgJobPipeline.PWG_MIME), request.first("document-format"))

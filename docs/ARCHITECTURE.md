@@ -38,7 +38,7 @@ flowchart TB
 
 ### Printing
 
-`printing/` owns the foreground service, one-job store/executor, physical page and N-up layout, raster memory policy, raster row composition, backend implementations, and protocol-specific pure encoders.
+`printing/` owns the foreground service, one-job store/executor, real-unit progress, bounded in-memory job metrics, physical page and N-up layout, raster memory policy, raster row composition, backend implementations, and protocol-specific pure encoders.
 
 ### IPP
 
@@ -58,7 +58,9 @@ IEEE-1284 parsing is isolated in `protocols/`. PWG Raster, PostScript, PCL 5, an
 
 ### Diagnostics
 
-The in-memory bounded diagnostic log and TXT/JSON export report protocol and capability state without including document content, preview images, or print payloads. Known IEEE-1284 serial fields are redacted. Compatibility export is a separate schema built only from a saved profile and current Android version; it excludes even the stored identity hash and free-form notes.
+The in-memory diagnostic log is bounded to 200 entries and 500 characters per entry. A separate `PrintJobMetricsStore` retains the latest 20 jobs in the current process: prepare/render/encode/completed-USB-write/IPP-wait durations, generated/successfully written bytes, rendered logical pages, completed physical sheets, and peak tracked raster buffers. `MetricsUsbTransport` measures only completed transport writes; a failing transfer cannot expose an unknown partially accepted prefix through the current transport interface.
+
+TXT/JSON diagnostics report protocol and capability state without including document content, preview images, filenames, document URIs, or print payloads. Known IEEE-1284 serial fields are redacted. Compatibility export is a separate schema built only from a saved profile and current Android version; it excludes even the stored identity hash and free-form notes. No metric or diagnostic record is uploaded automatically.
 
 ## Print pipeline
 
@@ -76,6 +78,8 @@ flowchart LR
 ```
 
 Only one job is active. A backend fallback is allowed during selection, before transmission. After any job bytes are sent, automatic fallback is forbidden to avoid duplicate physical output.
+
+Progress events carry a phase plus an optional completed/total pair in bytes, logical pages, or physical sheets. A percentage is derived only from a known positive total. Preparation, IPP polling, and unknown-length streams remain indeterminate; no clock-driven progress is synthesized. Terminal `SENT` describes completion of the application's transfer workflow and does not prove physical output.
 
 For composing raster backends, document pages take this additional path before protocol encoding:
 

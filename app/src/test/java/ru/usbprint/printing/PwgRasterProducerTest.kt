@@ -10,6 +10,8 @@ import ru.usbprint.domain.model.AppError
 import ru.usbprint.domain.model.Orientation
 import ru.usbprint.domain.model.PaperSize
 import ru.usbprint.domain.model.PrintException
+import ru.usbprint.domain.model.BackendId
+import ru.usbprint.domain.model.PrintJobStatus
 
 class PwgRasterProducerTest {
     private val layout = RasterPageLayout(
@@ -76,6 +78,24 @@ class PwgRasterProducerTest {
 
         assertEquals(AppError.PRINT_CANCELLED, error.error)
         assertEquals(0, output.size())
+    }
+
+    @Test fun recordsGeneratedBytesEncodingRenderingAndPhysicalSheets() = runBlocking {
+        val output = ByteArrayOutputStream()
+        val metrics = PrintMetricsCollector("metrics1", BackendId.PWG_RASTER, startedAtEpochMs = 1L)
+        PwgRasterProducer.write(
+            pages = listOf(1),
+            openPage = { FakePage(listOf(ByteArray(1), ByteArray(1))) },
+            writeBytes = { output.write(it) },
+            metrics = metrics
+        )
+
+        val result = metrics.finish(PrintJobStatus.SENT)
+        assertEquals(output.size().toLong(), result.bytesGenerated)
+        assertEquals(1, result.physicalSheetsGenerated)
+        assertTrue(result.peakRasterBufferBytes != null && result.peakRasterBufferBytes >= 1L)
+        assertTrue(result.renderTimeMs != null)
+        assertTrue(result.encodeTimeMs != null)
     }
 
     private inner class FakePage(private val rows: List<ByteArray>) : PwgRasterPage {

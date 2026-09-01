@@ -147,6 +147,12 @@ PWG создаётся один раз в unique file каталога `cache/ip
 
 После начала передачи нет retry/fallback на другой backend: executor выполняет только выбранный backend, чтобы не создать duplicate physical job.
 
+## Progress и локальные метрики
+
+Прогресс строится только из фактических единиц backend: bytes для direct/IPP upload при известной длине, physical sheets для PWG/PostScript/PCL и rendered pages для ESC/POS raster. Неизвестная длина, preparation и IPP job-status polling показываются как indeterminate. Таймер не превращается в проценты, а `SENT` не считается подтверждением физического отпечатка.
+
+На время текущего process executor хранит максимум 20 технических итогов: prepare/render/encode/USB-write/IPP-wait time, generated/successfully written bytes, rendered logical pages, completed physical sheets и peak tracked raster-buffer allocation. Обычный diagnostic log отдельно ограничен 200 строками и 500 символами на строку. Содержимое документа, payload, preview, имя и URI в эти записи не включаются; телеметрии и автоматической отправки нет.
+
 ## Legacy capabilities
 
 IEEE-1284 `CMD` продолжает выбирать только реализованные PDF/PWG/PostScript/PCL5/ESC-POS/RAW paths. PCL XL-only не включает PCL5. Для legacy raster при неизвестной бумаге/DPI может показываться подписанный `BACKEND_DEFAULT` (A4/300), но он не переименовывается в printer-confirmed capability.
@@ -162,6 +168,7 @@ Hidden stale IPP keyword очищается при сохранении наст
 - `Create-Job` + `Send-Document` path;
 - IPP PWG external CUPS/ipptool validation и physical printer verification;
 - полноценный долговременный job monitor после закрытия foreground service;
+- сохраняемая между запусками история метрик и профилирование на реальном low-RAM устройстве;
 - PCLm;
 - automatic promotion of stored hardware evidence into selectable printer capabilities;
 - per-value provenance внутри одного mixed set (например, `AUTO` и confirmed orientations).

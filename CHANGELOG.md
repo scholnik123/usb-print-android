@@ -26,6 +26,9 @@ Development changes below are not part of the published 1.0.0 APK.
 - IPP `media-col` generation with nested custom `media-size`; margins, source, and type are included only when their collection members were reported as supported
 - Custom-media validation for confirmed minimum/maximum dimensions, hardware and user margins, orientation, checked raster arithmetic, and shared raster memory limits
 - Exact custom dimensions in presets, versioned hardware-test profiles, and privacy-safe compatibility JSON records
+- Honest application-side progress in exact bytes, rendered pages, or completed physical sheets when totals are known, with an indeterminate state when they are not
+- Local per-job metrics for prepare/render/encode/USB-write/IPP-wait time, generated/sent bytes, rendered pages, physical sheets, and peak tracked raster buffers
+- Bounded in-memory diagnostics: the latest 20 job metrics, 200 general log entries, and 500 characters per log entry
 
 ### Changed
 
@@ -37,7 +40,7 @@ Development changes below are not part of the published 1.0.0 APK.
 
 ### Validation
 
-- 127 JVM tests pass on the development branch; Android lint and debug assembly pass
+- 133 JVM tests pass on the development branch; Android lint and debug assembly pass
 - Hardware-tested printers remain 0; no physical IPP PWG compatibility is claimed
 
 ## 1.0.0 - 2026-08-31

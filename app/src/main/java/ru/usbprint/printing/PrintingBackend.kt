@@ -11,8 +11,9 @@ interface PrintingBackend {
         job: PrintJob,
         transport: UsbTransport,
         documents: DocumentRepository,
-        onProgress: (Int) -> Unit,
-        isCancelled: () -> Boolean
+        onProgress: (PrintProgressUpdate) -> Unit,
+        isCancelled: () -> Boolean,
+        metrics: PrintMetricsSink = PrintMetricsSink.NONE
     )
     suspend fun cancel() = Unit
 }

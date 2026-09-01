@@ -74,7 +74,8 @@ object PwgRasterDocumentWriter {
         plan: PwgRasterJobPlan = PwgRasterJobPlanner.plan(job, capabilityBackend),
         writeBytes: suspend (ByteArray) -> Unit,
         onPageCompleted: (completed: Int, total: Int) -> Unit = { _, _ -> },
-        isCancelled: () -> Boolean = { false }
+        isCancelled: () -> Boolean = { false },
+        metrics: PrintMetricsSink = PrintMetricsSink.NONE
     ) {
         documents.createRenderer(job.document).use { renderer ->
             val sheets = try {
@@ -86,7 +87,7 @@ object PwgRasterDocumentWriter {
                 pages = sheets.indices.toList(),
                 openPage = { sheetIndex ->
                     val sheet = sheets[sheetIndex]
-                    val source = NUpRasterPageSource(renderer, sheet, plan.colorMode)
+                    val source = NUpRasterPageSource(renderer, sheet, plan.colorMode, metrics)
                     object : PwgRasterPage {
                         override val header = PwgRasterHeader(sheet.layout, plan.colorMode, plan.duplex, plan.tumble)
                         override fun renderRow(rowIndex: Int, destination: ByteArray) = source.renderRow(rowIndex, destination)
@@ -95,7 +96,8 @@ object PwgRasterDocumentWriter {
                 },
                 writeBytes = writeBytes,
                 onPageCompleted = onPageCompleted,
-                isCancelled = isCancelled
+                isCancelled = isCancelled,
+                metrics = metrics
             )
         }
     }

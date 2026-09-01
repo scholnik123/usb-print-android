@@ -25,6 +25,7 @@ class IppPwgJobPipeline(private val spoolManager: IppPwgSpoolManager) {
         producer: PwgSpoolProducer,
         mediaColSupported: Set<String> = emptySet(),
         mediaColMargins: HardwareMarginsMm? = null,
+        onSpoolReady: (documentLength: Long) -> Unit = {},
         isCancelled: () -> Boolean = { false }
     ): Pair<IppResponse, IppJobReference> {
         ensureNotCancelled(isCancelled)
@@ -38,6 +39,7 @@ class IppPwgJobPipeline(private val spoolManager: IppPwgSpoolManager) {
             ensureNotCancelled(isCancelled)
             val documentLength = spool.length
             if (documentLength <= 0L) throw PrintException(AppError.RENDER_ERROR)
+            onSpoolReady(documentLength)
             spool.openInputStream().buffered().use { document ->
                 client.printJob(
                     document = document,

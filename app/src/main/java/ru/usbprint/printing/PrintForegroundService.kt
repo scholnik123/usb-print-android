@@ -40,7 +40,8 @@ class PrintForegroundService : Service() {
                 observer = scope.launch {
                     container.printExecutor.state.collectLatest { state ->
                         val running = state.status !in terminalStates
-                        updateNotification(state.status.userLabel, state.progress, running)
+                        val text = listOfNotNull(state.status.userLabel, state.progressDetail, state.detail).filter(String::isNotBlank).joinToString(" · ")
+                        updateNotification(text, state.progress, running)
                     }
                 }
                 worker = scope.launch {
@@ -69,13 +70,13 @@ class PrintForegroundService : Service() {
         )
     }
 
-    private fun updateNotification(text: String, progress: Int, ongoing: Boolean) {
+    private fun updateNotification(text: String, progress: Int?, ongoing: Boolean) {
         if (Build.VERSION.SDK_INT < 33 || checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
             (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).notify(NOTIFICATION_ID, notification(text, progress, ongoing))
         }
     }
 
-    private fun notification(text: String, progress: Int, ongoing: Boolean): Notification {
+    private fun notification(text: String, progress: Int?, ongoing: Boolean): Notification {
         val contentIntent = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val cancelIntent = PendingIntent.getService(this, 1, Intent(this, PrintForegroundService::class.java).setAction(ACTION_CANCEL), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         return NotificationCompat.Builder(this, CHANNEL_ID)
@@ -85,7 +86,7 @@ class PrintForegroundService : Service() {
             .setContentIntent(contentIntent)
             .setOngoing(ongoing)
             .setOnlyAlertOnce(true)
-            .setProgress(100, progress.coerceIn(0, 100), progress == 0 && ongoing)
+            .setProgress(100, progress?.coerceIn(0, 100) ?: 0, progress == null && ongoing)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Отменить", cancelIntent)
             .build()
     }

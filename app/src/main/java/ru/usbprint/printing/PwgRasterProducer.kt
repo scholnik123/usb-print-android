@@ -22,24 +22,34 @@ object PwgRasterProducer {
         openPage: (sourcePage: Int) -> PwgRasterPage,
         writeBytes: suspend (ByteArray) -> Unit,
         onPageCompleted: (completed: Int, total: Int) -> Unit = { _, _ -> },
-        isCancelled: () -> Boolean = { false }
+        isCancelled: () -> Boolean = { false },
+        metrics: PrintMetricsSink = PrintMetricsSink.NONE
     ) {
         require(pages.isNotEmpty())
         ensureNotCancelled(isCancelled)
-        writeBytes(PwgRasterEncoder.syncWord)
+        suspend fun emit(bytes: ByteArray) { metrics.addGeneratedBytes(bytes.size.toLong()); writeBytes(bytes) }
+        emit(PwgRasterEncoder.syncWord)
         pages.forEachIndexed { index, sourcePage ->
             ensureNotCancelled(isCancelled)
             openPage(sourcePage).use { page ->
                 val header = page.header
-                writeBytes(header.toBytes())
+                emit(metrics.measureEncode { header.toBytes() })
                 val line = ByteArray(header.bytesPerLine)
                 val bytesPerColorValue = (header.bitsPerPixel + 7) / 8
-                repeat(header.layout.heightPx) { rowIndex ->
-                    ensureNotCancelled(isCancelled)
-                    page.renderRow(rowIndex, line)
-                    writeBytes(PwgRasterEncoder.encodeLine(line, bytesPerColorValue))
+                metrics.allocateRasterBuffer(line.size.toLong())
+                try {
+                    repeat(header.layout.heightPx) { rowIndex ->
+                        ensureNotCancelled(isCancelled)
+                        metrics.measureRender { page.renderRow(rowIndex, line) }
+                        val encoded = metrics.measureEncode { PwgRasterEncoder.encodeLine(line, bytesPerColorValue) }
+                        metrics.allocateRasterBuffer(encoded.size.toLong())
+                        try { emit(encoded) } finally { metrics.releaseRasterBuffer(encoded.size.toLong()) }
+                    }
+                } finally {
+                    metrics.releaseRasterBuffer(line.size.toLong())
                 }
             }
+            metrics.recordPhysicalSheet()
             onPageCompleted(index + 1, pages.size)
         }
     }

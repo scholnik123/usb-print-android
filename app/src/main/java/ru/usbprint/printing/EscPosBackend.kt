@@ -9,6 +9,7 @@ import ru.usbprint.domain.model.BackendId
 import ru.usbprint.domain.model.DocumentKind
 import ru.usbprint.domain.model.PrintException
 import ru.usbprint.domain.model.PrintJob
+import ru.usbprint.domain.model.PrintJobStatus
 import ru.usbprint.usb.UsbTransport
 import kotlin.math.ceil
 
@@ -16,76 +17,104 @@ import kotlin.math.ceil
 class EscPosBackend : PrintingBackend {
     override val id = BackendId.ESC_POS
 
-    override suspend fun print(job: PrintJob, transport: UsbTransport, documents: DocumentRepository, onProgress: (Int) -> Unit, isCancelled: () -> Boolean) {
-        repeat(job.settings.copies) { copy ->
+    override suspend fun print(job: PrintJob, transport: UsbTransport, documents: DocumentRepository, onProgress: (PrintProgressUpdate) -> Unit, isCancelled: () -> Boolean, metrics: PrintMetricsSink) {
+        suspend fun emit(bytes: ByteArray) { metrics.addGeneratedBytes(bytes.size.toLong()); transport.write(bytes) }
+        val pagesPerCopy = if (job.document.kind in setOf(DocumentKind.IMAGE, DocumentKind.PDF)) {
+            PageRangeParser.expand(job.settings.pageSelection, job.document.pageCount ?: 1)
+        } else emptyList()
+        val totalPages = Math.multiplyExact(pagesPerCopy.size, job.settings.copies)
+        var completedPages = 0
+        onProgress(if (totalPages > 0) PrintProgressUpdate.pages(PrintJobStatus.SENDING, 0, totalPages) else PrintProgressUpdate.indeterminate(PrintJobStatus.SENDING))
+        repeat(job.settings.copies) {
             ensureNotCancelled(isCancelled)
-            transport.write(byteArrayOf(ESC, AT, ESC, A, 0))
+            emit(metrics.measureEncode { byteArrayOf(ESC, AT, ESC, A, 0) })
             when (job.document.kind) {
-                DocumentKind.TEXT -> printText(job, transport, documents, isCancelled)
-                DocumentKind.IMAGE, DocumentKind.PDF -> printRaster(job, transport, documents, isCancelled) { value ->
-                    onProgress((((copy + value / 100f) / job.settings.copies) * 100).toInt().coerceIn(1, 99))
+                DocumentKind.TEXT -> printText(job, transport, documents, isCancelled, metrics)
+                DocumentKind.IMAGE, DocumentKind.PDF -> printRaster(job, pagesPerCopy, transport, documents, isCancelled, metrics) {
+                    completedPages++
+                    onProgress(PrintProgressUpdate.pages(PrintJobStatus.SENDING, completedPages, totalPages))
                 }
                 else -> throw PrintException(AppError.DOCUMENT_NOT_SUPPORTED)
             }
-            transport.write(byteArrayOf(ESC, D, 4))
+            emit(metrics.measureEncode { byteArrayOf(ESC, D, 4) })
         }
-        onProgress(100)
     }
 
-    private suspend fun printText(job: PrintJob, transport: UsbTransport, documents: DocumentRepository, isCancelled: () -> Boolean) {
+    private suspend fun printText(job: PrintJob, transport: UsbTransport, documents: DocumentRepository, isCancelled: () -> Boolean, metrics: PrintMetricsSink) {
         documents.openInput(job.document).bufferedReader(Charsets.UTF_8).use { reader ->
             while (true) {
                 val line = reader.readLine() ?: break
                 ensureNotCancelled(isCancelled)
                 // ESC/POS code pages differ across devices; UTF-8 is used without claiming universal Cyrillic support.
-                transport.write(line.take(96).toByteArray(Charsets.UTF_8) + byteArrayOf(LF))
+                val bytes = metrics.measureEncode { line.take(96).toByteArray(Charsets.UTF_8) + byteArrayOf(LF) }
+                metrics.addGeneratedBytes(bytes.size.toLong())
+                transport.write(bytes)
             }
         }
     }
 
     private suspend fun printRaster(
         job: PrintJob,
+        pages: List<Int>,
         transport: UsbTransport,
         documents: DocumentRepository,
         isCancelled: () -> Boolean,
-        onProgress: (Int) -> Unit
+        metrics: PrintMetricsSink,
+        onPageCompleted: () -> Unit
     ) {
-        val pages = PageRangeParser.expand(job.settings.pageSelection, job.document.pageCount ?: 1)
         documents.createRenderer(job.document).use { renderer ->
-            pages.forEachIndexed { pagePosition, userPage ->
+            pages.forEach { userPage ->
                 ensureNotCancelled(isCancelled)
-                val bitmap = renderer.renderPage(userPage - 1, RASTER_WIDTH)
-                try { sendBitmap(bitmap, transport, isCancelled) } finally { bitmap.recycle() }
-                onProgress(((pagePosition + 1f) / pages.size * 100).toInt())
+                val bitmap = metrics.measureRender { renderer.renderPage(userPage - 1, RASTER_WIDTH) }
+                val bitmapBytes = bitmap.allocationByteCount.toLong()
+                metrics.allocateRasterBuffer(bitmapBytes)
+                try { sendBitmap(bitmap, transport, isCancelled, metrics) }
+                finally { bitmap.recycle(); metrics.releaseRasterBuffer(bitmapBytes) }
+                metrics.recordPageRendered()
+                onPageCompleted()
             }
         }
     }
 
-    private suspend fun sendBitmap(source: Bitmap, transport: UsbTransport, isCancelled: () -> Boolean) {
-        val scaled = if (source.width > RASTER_WIDTH) Bitmap.createScaledBitmap(source, RASTER_WIDTH, (source.height.toFloat() / source.width * RASTER_WIDTH).toInt().coerceAtLeast(1), true) else source
+    private suspend fun sendBitmap(source: Bitmap, transport: UsbTransport, isCancelled: () -> Boolean, metrics: PrintMetricsSink) {
+        val scaled = if (source.width > RASTER_WIDTH) metrics.measureRender {
+            Bitmap.createScaledBitmap(source, RASTER_WIDTH, (source.height.toFloat() / source.width * RASTER_WIDTH).toInt().coerceAtLeast(1), true)
+        } else source
+        val scaledBytes = scaled.allocationByteCount.toLong().takeIf { scaled !== source } ?: 0L
+        if (scaledBytes > 0L) metrics.allocateRasterBuffer(scaledBytes)
         try {
             val widthBytes = ceil(scaled.width / 8.0).toInt()
             var row = 0
             while (row < scaled.height) {
                 ensureNotCancelled(isCancelled)
                 val rows = minOf(BAND_HEIGHT, scaled.height - row)
-                val payload = ByteArray(8 + widthBytes * rows)
-                payload[0] = GS; payload[1] = V; payload[2] = ZERO; payload[3] = ZERO
-                payload[4] = (widthBytes and 0xff).toByte(); payload[5] = ((widthBytes shr 8) and 0xff).toByte()
-                payload[6] = (rows and 0xff).toByte(); payload[7] = ((rows shr 8) and 0xff).toByte()
-                for (y in 0 until rows) for (x in 0 until scaled.width) {
-                    val pixel = scaled.getPixel(x, row + y)
-                    val luminance = (Color.red(pixel) * 299 + Color.green(pixel) * 587 + Color.blue(pixel) * 114) / 1000
-                    if (luminance < 160) {
-                        val offset = 8 + y * widthBytes + x / 8
-                        payload[offset] = (payload[offset].toInt() or (0x80 shr (x % 8))).toByte()
+                val payload = metrics.measureEncode {
+                    ByteArray(8 + widthBytes * rows).also { output ->
+                        output[0] = GS; output[1] = V; output[2] = ZERO; output[3] = ZERO
+                        output[4] = (widthBytes and 0xff).toByte(); output[5] = ((widthBytes shr 8) and 0xff).toByte()
+                        output[6] = (rows and 0xff).toByte(); output[7] = ((rows shr 8) and 0xff).toByte()
+                        for (y in 0 until rows) for (x in 0 until scaled.width) {
+                            val pixel = scaled.getPixel(x, row + y)
+                            val luminance = (Color.red(pixel) * 299 + Color.green(pixel) * 587 + Color.blue(pixel) * 114) / 1000
+                            if (luminance < 160) {
+                                val offset = 8 + y * widthBytes + x / 8
+                                output[offset] = (output[offset].toInt() or (0x80 shr (x % 8))).toByte()
+                            }
+                        }
                     }
                 }
-                transport.write(payload)
+                metrics.allocateRasterBuffer(payload.size.toLong())
+                try {
+                    metrics.addGeneratedBytes(payload.size.toLong())
+                    transport.write(payload)
+                } finally {
+                    metrics.releaseRasterBuffer(payload.size.toLong())
+                }
                 row += rows
             }
         } finally {
             if (scaled !== source) scaled.recycle()
+            if (scaledBytes > 0L) metrics.releaseRasterBuffer(scaledBytes)
         }
     }
 

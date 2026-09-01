@@ -47,6 +47,12 @@
 - PCLm — не реализован и не участвует в Auto.
 - RAW — только заранее подготовленный PCL/PS для совпадающего CMD; приложение не преобразует payload.
 
+## Progress and diagnostics
+
+Development builds report backend work in native units rather than advancing a timer. Direct USB and IPP document transfer use bytes when the exact total is available; PWG/PostScript/PCL use completed physical sheets; ESC/POS raster output uses completed logical pages. Discovery, preparation, IPP status waiting, and streams with an unknown total remain indeterminate. A completed counter describes application-side generation/transfer only and is not hardware verification.
+
+The executor retains at most 20 in-memory job summaries with phase timings, generated and successfully written bytes, rendered pages, completed physical sheets, and peak tracked raster-buffer allocation. The summaries contain no document content, payload, filename, or URI and disappear with the application process.
+
 ## Hardware confidence
 
 Hardware verified printers: **0**. В проекте нет выдуманного списка «поддерживаемых брендов». Для появления подтверждённой строки нужны конкретная модель, Android/OTG environment, точные settings/backend/encoder version и явная визуальная оценка бумажного результата.

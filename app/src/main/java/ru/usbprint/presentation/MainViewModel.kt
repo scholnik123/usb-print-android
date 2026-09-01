@@ -51,7 +51,8 @@ data class MainUiState(
     val advancedMode: Boolean = false,
     val customPresets: List<SavedPrintPreset> = emptyList(),
     val jobStatus: PrintJobStatus? = null,
-    val progress: Int = 0,
+    val progress: Int? = null,
+    val progressDetail: String? = null,
     val jobDetail: String? = null,
     val error: AppError? = null,
     val isLoadingDocument: Boolean = false,
@@ -99,6 +100,7 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
                     current.copy(
                         jobStatus = execution.status,
                         progress = execution.progress,
+                        progressDetail = execution.progressDetail,
                         jobDetail = execution.detail,
                         error = execution.error ?: current.error,
                         hardwareTestAwaitingResult = current.hardwareTestAwaitingResult || shouldRequestObservation,
@@ -199,7 +201,8 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
             _state.update {
                 it.copy(
                     jobStatus = PrintJobStatus.VALIDATING,
-                    progress = 0,
+                    progress = null,
+                    progressDetail = null,
                     error = null,
                     hardwareTestAwaitingResult = if (current.isHardwareTestDocument) false else it.hardwareTestAwaitingResult,
                     showHardwareTestWizard = if (current.isHardwareTestDocument) false else it.showHardwareTestWizard,
@@ -337,6 +340,8 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
                 _state.value.effectiveCapabilities.limitations.forEach { appendLine("Ограничение: $it") }
                 _state.value.printerOverride?.let { appendLine("Экспериментальное переопределение: активно") }
             }
+            appendLine("Метрики заданий (последние ${container.printJobMetrics.history.value.size}, максимум 20; только текущий процесс):")
+            container.printJobMetrics.history.value.forEach { appendLine("  ${it.diagnosticLine()}") }
         }
     }
 

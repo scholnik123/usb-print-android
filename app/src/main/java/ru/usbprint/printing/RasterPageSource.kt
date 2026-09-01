@@ -21,9 +21,10 @@ class RasterPageSource(
     private val renderer: DocumentRenderer,
     private val pageIndex: Int,
     private val layout: RasterPageLayout,
-    private val mode: RasterColorMode
+    private val mode: RasterColorMode,
+    metrics: PrintMetricsSink = PrintMetricsSink.NONE
 ) : RasterRowSource {
-    private val slot = RasterSlotSource(renderer, pageIndex, layout.widthPx, layout.content, PixelRect(0, 0, layout.widthPx, layout.heightPx), false, mode)
+    private val slot = RasterSlotSource(renderer, pageIndex, layout.widthPx, layout.content, PixelRect(0, 0, layout.widthPx, layout.heightPx), false, mode, metrics)
 
     /** Fills `out` exactly as a CUPS/PWG/PCL row: RGB, gray, or MSB-first 1-bit black. */
     override fun renderRow(outputY: Int, out: ByteArray) {
@@ -38,10 +39,11 @@ class RasterPageSource(
 class NUpRasterPageSource(
     renderer: DocumentRenderer,
     private val sheet: NUpSheet,
-    private val mode: RasterColorMode
+    private val mode: RasterColorMode,
+    metrics: PrintMetricsSink = PrintMetricsSink.NONE
 ) : RasterRowSource {
     private val sources = sheet.slots.map { slot ->
-        RasterSlotSource(renderer, slot.pageNumber - 1, sheet.layout.widthPx, slot.content, slot.bounds, slot.rotateClockwise, mode)
+        RasterSlotSource(renderer, slot.pageNumber - 1, sheet.layout.widthPx, slot.content, slot.bounds, slot.rotateClockwise, mode, metrics)
     }
 
     override fun renderRow(outputY: Int, out: ByteArray) {
@@ -61,12 +63,15 @@ private class RasterSlotSource(
     private val content: PixelRect,
     private val clip: PixelRect,
     private val rotateClockwise: Boolean,
-    private val mode: RasterColorMode
+    private val mode: RasterColorMode,
+    private val metrics: PrintMetricsSink
 ) : AutoCloseable {
     private var bitmap: Bitmap? = null
     private var cachedSourceRow = -1
     private var sourcePixels = IntArray(0)
     private var exhausted = false
+    private var allocatedBytes = 0L
+    private var completed = false
 
     private fun source(): Bitmap {
         bitmap?.let { return it }
@@ -79,6 +84,8 @@ private class RasterSlotSource(
                 }
                 bitmap = it
                 sourcePixels = IntArray(it.width)
+                allocatedBytes = Math.addExact(it.allocationByteCount.toLong(), Math.multiplyExact(it.width.toLong(), Int.SIZE_BYTES.toLong()))
+                metrics.allocateRasterBuffer(allocatedBytes)
             }
         } catch (error: PrintException) { throw error }
         catch (error: Throwable) { throw PrintException(AppError.RENDER_ERROR, error) }
@@ -109,10 +116,20 @@ private class RasterSlotSource(
             }
             writePixel(out, x, color, mode)
         }
-        if (outputY == visibleBottom - 1) { close(); exhausted = true }
+        if (outputY == visibleBottom - 1) {
+            if (!completed) { metrics.recordPageRendered(); completed = true }
+            close()
+            exhausted = true
+        }
     }
 
-    override fun close() { bitmap?.recycle(); bitmap = null; sourcePixels = IntArray(0) }
+    override fun close() {
+        bitmap?.recycle()
+        bitmap = null
+        sourcePixels = IntArray(0)
+        if (allocatedBytes > 0L) metrics.releaseRasterBuffer(allocatedBytes)
+        allocatedBytes = 0L
+    }
 
 }
 

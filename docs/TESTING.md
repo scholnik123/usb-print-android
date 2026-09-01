@@ -20,7 +20,7 @@ Windows:
 .\gradlew.bat assembleDebug
 ```
 
-The first public release baseline is 61 JVM tests. The development branch baseline after IPP PWG, hardware-test profiles/export, N-up, and confirmed custom paper is 127 JVM tests. The number is not a target by itself; wire boundaries, protocol selection, cleanup, state transitions, privacy invariants, layout ordering, and overflow behavior are the important coverage.
+The first public release baseline is 61 JVM tests. The development branch baseline after IPP PWG, hardware-test profiles/export, N-up, confirmed custom paper, and local progress/metrics is 133 JVM tests. The number is not a target by itself; wire boundaries, protocol selection, cleanup, state transitions, privacy invariants, layout ordering, metrics bounds, and overflow behavior are the important coverage.
 
 ## JVM and unit tests
 
@@ -33,6 +33,9 @@ The unit suite covers:
 - decimal millimetre/inch to micron conversion, confirmed custom-media min/max, orientation and hardware-margin checks, and checked micron-to-raster arithmetic;
 - 2-up/4-up grouping, odd final sheets, range/reverse, collated and uncollated copies, portrait/landscape grids, spacing, borders, auto-rotation, and duplex planning;
 - USB partial-write handling;
+- real-unit progress with known totals and indeterminate progress with unknown totals;
+- phase timing/counter accumulation, peak raster-buffer tracking, bounded 20-job history, successful-write byte accounting, and failed-write timing;
+- bounded diagnostic-log entry count and per-entry length;
 - MIME/document classification and DataStore-compatible domain behavior.
 
 ## IPP tests

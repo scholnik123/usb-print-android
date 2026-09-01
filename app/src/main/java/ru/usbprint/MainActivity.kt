@@ -311,7 +311,12 @@ private fun HardwareTestResultDialog(
 @Composable private fun PrintAction(state: MainUiState, onPrint: () -> Unit, onCancel: () -> Unit) {
     val printing = isJobRunning(state.jobStatus)
     if (printing) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { Text(state.jobDetail?.let { "Статус принтера: $it · ${state.progress}%" } ?: "Печать: ${state.progress}%"); LinearProgressIndicator(progress = { state.progress / 100f }, modifier = Modifier.fillMaxWidth()); OutlinedButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) { Text("Отменить") } }
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(listOfNotNull(state.progressDetail, state.jobDetail?.let { "Статус принтера: $it" }).joinToString(" · ").ifBlank { "Подготовка печати…" })
+            state.progress?.let { progress -> LinearProgressIndicator(progress = { progress / 100f }, modifier = Modifier.fillMaxWidth()) }
+                ?: LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            OutlinedButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) { Text("Отменить") }
+        }
     } else {
         Button(onClick = onPrint, modifier = Modifier.fillMaxWidth().height(56.dp), enabled = state.document != null && state.usb is UsbPrinterState.Ready && state.backend.selected != BackendId.NONE) { Icon(Icons.Default.Print, null); Spacer(Modifier.size(10.dp)); Text("Печать") }
         if (state.jobStatus == PrintJobStatus.SENT) Text(state.jobDetail?.let { "Последний статус IPP: $it" } ?: "Задание передано принтеру.", color = MaterialTheme.colorScheme.primary)
