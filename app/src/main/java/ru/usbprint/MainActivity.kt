@@ -6,6 +6,7 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.activity.viewModels
@@ -15,11 +16,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -53,6 +57,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -87,6 +92,8 @@ import ru.usbprint.domain.model.PrinterKeywordOption
 import ru.usbprint.domain.model.ScalingMode
 import ru.usbprint.presentation.MainUiState
 import ru.usbprint.presentation.MainViewModel
+import ru.usbprint.presentation.AdaptiveContentContainer
+import ru.usbprint.presentation.AdaptiveWidthClass
 import ru.usbprint.presentation.theme.UsbPrintTheme
 import ru.usbprint.usb.UsbPrinterState
 import java.math.BigDecimal
@@ -102,6 +109,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         if (android.os.Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
             requestNotifications.launch(android.Manifest.permission.POST_NOTIFICATIONS)
         }
@@ -146,16 +154,22 @@ private fun UsbPrintScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val logs by viewModel.logs.collectAsStateWithLifecycle()
     val snackbars = remember { SnackbarHostState() }
-    var showSettings by remember { mutableStateOf(false) }
-    var showDiagnostics by remember { mutableStateOf(false) }
+    var showSettings by rememberSaveable { mutableStateOf(false) }
+    var showDiagnostics by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(state.error) { state.error?.let { snackbars.showSnackbar(it.userMessage); viewModel.clearError() } }
     Scaffold(
         topBar = { TopAppBar(title = { Text("USB Print") }, actions = { IconButton(onClick = { showDiagnostics = true }) { Icon(Icons.Default.Usb, "Информация о принтере") } }, colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)) },
-        snackbarHost = { SnackbarHost(snackbars) }
+        snackbarHost = { SnackbarHost(snackbars) },
+        contentWindowInsets = WindowInsets.safeDrawing
     ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        AdaptiveContentContainer(
+            Modifier
+                .padding(padding)
+                .consumeWindowInsets(padding)
+                .imePadding()
+        ) { widthClass ->
             Spacer(Modifier.height(2.dp))
-            PrinterCard(state, viewModel::requestUsbPermission, viewModel::refreshPrinter, viewModel::selectPrinter)
+            PrinterCard(state, viewModel::requestUsbPermission, viewModel::refreshPrinter, viewModel::selectPrinter, widthClass == AdaptiveWidthClass.COMPACT)
             DocumentCard(state, onSelect, viewModel::loadHardwareTestPage)
             if (state.document != null) {
                 OutlinedButton(onClick = { showSettings = true }, modifier = Modifier.fillMaxWidth(), enabled = !isJobRunning(state.jobStatus)) { Text("Настройки печати") }
@@ -249,46 +263,80 @@ private fun HardwareTestResultDialog(
     )
 }
 
-@Composable private fun PrinterCard(state: MainUiState, onPermission: () -> Unit, onRefresh: () -> Unit, onSelectPrinter: (String) -> Unit) {
+@Composable private fun PrinterCard(
+    state: MainUiState,
+    onPermission: () -> Unit,
+    onRefresh: () -> Unit,
+    onSelectPrinter: (String) -> Unit,
+    stackAction: Boolean
+) {
     Card(Modifier.fillMaxWidth()) {
         Column {
-        Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            Icon(Icons.Default.Print, null, modifier = Modifier.size(34.dp), tint = MaterialTheme.colorScheme.primary)
-            Column(Modifier.weight(1f)) {
-                when (val usb = state.usb) {
-                    UsbPrinterState.Checking -> Text("Поиск USB-принтера…")
-                    UsbPrinterState.HostUnsupported -> Text("USB Host не поддерживается", color = MaterialTheme.colorScheme.error)
-                    UsbPrinterState.NoPrinter -> { Text("Принтер не подключён"); Text("Проверьте OTG-переходник и питание принтера.", style = MaterialTheme.typography.bodySmall) }
-                    is UsbPrinterState.PermissionRequired -> { Text("Требуется доступ к USB-принтеру"); Text("USB Print требуется доступ к подключенному принтеру.", style = MaterialTheme.typography.bodySmall) }
-                    is UsbPrinterState.Connecting -> Text("Подключение к принтеру…")
-                    is UsbPrinterState.Ready -> { Text(usb.printer.capabilities.displayName); Text(usb.printer.capabilities.portStatus?.userMessage ?: "USB подключён · Status unavailable", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall) }
-                    is UsbPrinterState.Error -> Text(usb.error.userMessage, color = MaterialTheme.colorScheme.error)
+            if (stackAction) {
+                Row(Modifier.padding(start = 18.dp, top = 18.dp, end = 18.dp), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    PrinterIcon()
+                    PrinterSummary(state, Modifier.weight(1f))
+                }
+                PrinterStateAction(state, onPermission, onRefresh, Modifier.padding(horizontal = 18.dp, vertical = 12.dp).fillMaxWidth())
+            } else {
+                Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    PrinterIcon()
+                    PrinterSummary(state, Modifier.weight(1f))
+                    PrinterStateAction(state, onPermission, onRefresh)
                 }
             }
-            when (state.usb) {
-                is UsbPrinterState.PermissionRequired -> Button(onClick = onPermission) { Text("Разрешить") }
-                UsbPrinterState.NoPrinter, is UsbPrinterState.Error -> OutlinedButton(onClick = onRefresh) { Text("Обновить") }
-                else -> Unit
+            val available = when (val usb = state.usb) {
+                is UsbPrinterState.Ready -> usb.printers
+                is UsbPrinterState.PermissionRequired -> usb.printers
+                is UsbPrinterState.Connecting -> usb.printers
+                is UsbPrinterState.Error -> usb.printers
+                else -> emptyList()
             }
-        }
-        val available = when (val usb = state.usb) {
-            is UsbPrinterState.Ready -> usb.printers
-            is UsbPrinterState.PermissionRequired -> usb.printers
-            is UsbPrinterState.Connecting -> usb.printers
-            is UsbPrinterState.Error -> usb.printers
-            else -> emptyList()
-        }
-        if (available.size > 1) {
-            Column(Modifier.padding(start = 18.dp, end = 18.dp, bottom = 14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("Выберите принтер", style = MaterialTheme.typography.labelLarge)
-                available.forEach { ref ->
-                    OutlinedButton(onClick = { onSelectPrinter(ref.deviceKey) }, modifier = Modifier.fillMaxWidth()) {
-                        Text(ref.capabilities.displayName + if ((state.usb as? UsbPrinterState.Ready)?.printer?.deviceKey == ref.deviceKey) " · выбран" else "")
+            if (available.size > 1) {
+                Column(Modifier.padding(start = 18.dp, end = 18.dp, bottom = 14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Выберите принтер", style = MaterialTheme.typography.labelLarge)
+                    available.forEach { ref ->
+                        OutlinedButton(onClick = { onSelectPrinter(ref.deviceKey) }, modifier = Modifier.fillMaxWidth()) {
+                            Text(ref.capabilities.displayName + if ((state.usb as? UsbPrinterState.Ready)?.printer?.deviceKey == ref.deviceKey) " · выбран" else "")
+                        }
                     }
                 }
             }
         }
+    }
+}
+
+@Composable private fun PrinterIcon() {
+    Icon(Icons.Default.Print, null, modifier = Modifier.size(34.dp), tint = MaterialTheme.colorScheme.primary)
+}
+
+@Composable private fun PrinterSummary(state: MainUiState, modifier: Modifier = Modifier) {
+    Column(modifier) {
+        when (val usb = state.usb) {
+            UsbPrinterState.Checking -> Text("Поиск USB-принтера…")
+            UsbPrinterState.HostUnsupported -> Text("USB Host не поддерживается", color = MaterialTheme.colorScheme.error)
+            UsbPrinterState.NoPrinter -> { Text("Принтер не подключён"); Text("Проверьте OTG-переходник и питание принтера.", style = MaterialTheme.typography.bodySmall) }
+            is UsbPrinterState.PermissionRequired -> { Text("Требуется доступ к USB-принтеру"); Text("USB Print требуется доступ к подключенному принтеру.", style = MaterialTheme.typography.bodySmall) }
+            is UsbPrinterState.Connecting -> Text("Подключение к принтеру…")
+            is UsbPrinterState.Ready -> {
+                Text(usb.printer.capabilities.displayName, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(usb.printer.capabilities.portStatus?.userMessage ?: "USB подключён · Status unavailable", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
+            }
+            is UsbPrinterState.Error -> Text(usb.error.userMessage, color = MaterialTheme.colorScheme.error)
         }
+    }
+}
+
+@Composable private fun PrinterStateAction(
+    state: MainUiState,
+    onPermission: () -> Unit,
+    onRefresh: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    when (state.usb) {
+        is UsbPrinterState.PermissionRequired -> Button(onClick = onPermission, modifier = modifier) { Text("Разрешить") }
+        UsbPrinterState.NoPrinter, is UsbPrinterState.Error -> OutlinedButton(onClick = onRefresh, modifier = modifier) { Text("Обновить") }
+        else -> Unit
     }
 }
 

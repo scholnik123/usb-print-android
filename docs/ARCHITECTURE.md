@@ -28,6 +28,8 @@ flowchart TB
 
 `MainActivity` and `presentation/` render USB state, preview, capability-driven settings, progress, diagnostics, and errors. Compose does not encode binary printer protocols.
 
+Responsive layout uses one constraint-based `AdaptiveLayoutPolicy`, so live split-screen/foldable resizing is classified from the available Compose width rather than a device model or physical pixel count. Widths below 600 dp are `COMPACT`, 600–839 dp are `MEDIUM`, and 840 dp or wider are `EXPANDED`. The main scroll surface is centered and limited to 840 dp on wider windows; compact printer actions stack vertically. `Scaffold` owns safe-drawing insets, while consumed content insets plus IME padding keep the scrollable controls clear of system bars, cutouts, and the keyboard.
+
 ### Domain
 
 `domain/model/` contains documents, jobs, settings, exact custom-media micron values, printer capabilities, capability provenance, checked raster limits, and backend identifiers. `domain/logic/` validates settings, plans logical page order/copies, resolves presets, intersects capabilities, and chooses a backend before transmission.
