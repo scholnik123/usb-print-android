@@ -453,7 +453,7 @@ private fun availablePrinters(state: MainUiState): List<PrinterRef> = when (val 
     else -> emptyList()
 }
 
-@Composable private fun PrinterSelectionDialog(
+@Composable internal fun PrinterSelectionDialog(
     printers: List<PrinterRef>,
     selectedDeviceKey: String?,
     onSelect: (String) -> Unit,
@@ -626,7 +626,7 @@ private fun ResponsiveMainPreview() {
 @Preview(name = "Large font 2.0", widthDp = 360, heightDp = 720, fontScale = 2f, showBackground = true)
 @Composable private fun LargeFontMainPreview() = ResponsiveMainPreview()
 
-@Composable private fun PrintSettingsDialog(
+@Composable internal fun PrintSettingsDialog(
     initial: PrintSettings,
     pageCount: Int?,
     capabilities: EffectivePrintCapabilities,
@@ -902,7 +902,7 @@ private fun paperNumberInput(value: String): String = value.replace(',', '.').fi
     }
 }
 
-@Composable private fun DiagnosticsDialog(text: String, logs: List<String>, onExportText: () -> Unit, onExportJson: () -> Unit, onDismiss: () -> Unit) {
+@Composable internal fun DiagnosticsDialog(text: String, logs: List<String>, onExportText: () -> Unit, onExportJson: () -> Unit, onDismiss: () -> Unit) {
     val clipboard = LocalClipboardManager.current
     AlertDialog(modifier = Modifier.imePadding(), onDismissRequest = onDismiss, title = { Text("Информация о принтере") }, text = {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) { Text(text, style = MaterialTheme.typography.bodySmall); if (logs.isNotEmpty()) { HorizontalDivider(Modifier.padding(vertical = 10.dp)); Text("Журнал", style = MaterialTheme.typography.labelLarge); Text(logs.joinToString("\n"), style = MaterialTheme.typography.bodySmall) } }
