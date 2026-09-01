@@ -13,11 +13,11 @@ import androidx.activity.viewModels
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -26,6 +26,8 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Print
@@ -64,6 +66,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ru.usbprint.domain.logic.PageRangeParser
@@ -88,12 +91,15 @@ import ru.usbprint.domain.model.HardwarePrintIssue
 import ru.usbprint.domain.model.HardwareTestOutcome
 import ru.usbprint.domain.model.Microns
 import ru.usbprint.domain.model.PrinterResolution
+import ru.usbprint.domain.model.PrinterRef
 import ru.usbprint.domain.model.PrinterKeywordOption
 import ru.usbprint.domain.model.ScalingMode
 import ru.usbprint.presentation.MainUiState
 import ru.usbprint.presentation.MainViewModel
 import ru.usbprint.presentation.AdaptiveContentContainer
+import ru.usbprint.presentation.AdaptiveTwoColumnFields
 import ru.usbprint.presentation.AdaptiveWidthClass
+import ru.usbprint.presentation.ResponsiveChoiceFlow
 import ru.usbprint.presentation.theme.UsbPrintTheme
 import ru.usbprint.usb.UsbPrinterState
 import java.math.BigDecimal
@@ -222,6 +228,7 @@ private fun HardwareTestResultDialog(
         (outcome != HardwareTestOutcome.OTHER || notes.isNotBlank())
 
     AlertDialog(
+        modifier = Modifier.imePadding(),
         onDismissRequest = onDismiss,
         title = { Text("Что произошло на бумаге?") },
         text = {
@@ -236,7 +243,7 @@ private fun HardwareTestResultDialog(
                     OutlinedButton(onClick = { outcome = null; issues = emptySet() }) { Text("Изменить результат") }
                     if (outcome == HardwareTestOutcome.PRINTED_WITH_ISSUES) {
                         Text("Отметьте все замеченные проблемы:")
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        ResponsiveChoiceFlow {
                             HardwarePrintIssue.entries.forEach { issue ->
                                 FilterChip(
                                     selected = issue in issues,
@@ -270,6 +277,7 @@ private fun HardwareTestResultDialog(
     onSelectPrinter: (String) -> Unit,
     stackAction: Boolean
 ) {
+    var showPrinterSelector by rememberSaveable { mutableStateOf(false) }
     Card(Modifier.fillMaxWidth()) {
         Column {
             if (stackAction) {
@@ -294,16 +302,60 @@ private fun HardwareTestResultDialog(
             }
             if (available.size > 1) {
                 Column(Modifier.padding(start = 18.dp, end = 18.dp, bottom = 14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("Выберите принтер", style = MaterialTheme.typography.labelLarge)
-                    available.forEach { ref ->
-                        OutlinedButton(onClick = { onSelectPrinter(ref.deviceKey) }, modifier = Modifier.fillMaxWidth()) {
-                            Text(ref.capabilities.displayName + if ((state.usb as? UsbPrinterState.Ready)?.printer?.deviceKey == ref.deviceKey) " · выбран" else "")
-                        }
-                    }
+                    Text("Доступно принтеров: ${available.size}", style = MaterialTheme.typography.labelLarge)
+                    OutlinedButton(onClick = { showPrinterSelector = true }, modifier = Modifier.fillMaxWidth()) { Text("Выбрать принтер") }
                 }
             }
         }
     }
+    if (showPrinterSelector) {
+        PrinterSelectionDialog(
+            printers = availablePrinters(state),
+            selectedDeviceKey = (state.usb as? UsbPrinterState.Ready)?.printer?.deviceKey,
+            onSelect = { deviceKey -> showPrinterSelector = false; onSelectPrinter(deviceKey) },
+            onDismiss = { showPrinterSelector = false }
+        )
+    }
+}
+
+private fun availablePrinters(state: MainUiState): List<PrinterRef> = when (val usb = state.usb) {
+    is UsbPrinterState.Ready -> usb.printers
+    is UsbPrinterState.PermissionRequired -> usb.printers
+    is UsbPrinterState.Connecting -> usb.printers
+    is UsbPrinterState.Error -> usb.printers
+    else -> emptyList()
+}
+
+@Composable private fun PrinterSelectionDialog(
+    printers: List<PrinterRef>,
+    selectedDeviceKey: String?,
+    onSelect: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        modifier = Modifier.imePadding(),
+        onDismissRequest = onDismiss,
+        title = { Text("Выберите принтер") },
+        text = {
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth().heightIn(max = 400.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(printers, key = PrinterRef::deviceKey) { printer ->
+                    OutlinedButton(onClick = { onSelect(printer.deviceKey) }, modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            text = printer.capabilities.displayName + if (printer.deviceKey == selectedDeviceKey) " · выбран" else "",
+                            modifier = Modifier.fillMaxWidth(),
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Start
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = { OutlinedButton(onClick = onDismiss) { Text("Закрыть") } }
+    )
 }
 
 @Composable private fun PrinterIcon() {
@@ -421,13 +473,13 @@ private fun HardwareTestResultDialog(
     val enabled = capabilities.isPrintable
     val nUpAvailable = capabilities.supportsNUp || compatibleBackends.any { BackendRegistry.descriptorFor(it).supportsNUp }
 
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("Настройки печати") }, text = {
-        Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    AlertDialog(modifier = Modifier.imePadding(), onDismissRequest = onDismiss, title = { Text("Настройки печати") }, text = {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("${capabilities.backendId.title} · показываются только значения, пересекающиеся с возможностями backend и принтера.", style = MaterialTheme.typography.bodySmall)
             if (capabilities.limitations.isNotEmpty()) Text(capabilities.limitations.joinToString("\n"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
 
             Text("Пресеты", style = MaterialTheme.typography.labelLarge)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ResponsiveChoiceFlow {
                 listOf(PrintPresetId.AUTO, PrintPresetId.DRAFT, PrintPresetId.NORMAL, PrintPresetId.HIGH, PrintPresetId.PHOTO, PrintPresetId.TEXT).forEach { preset ->
                     FilterChip(initial.preset == preset, { onApplyPreset(PrintPresetResolver.resolve(preset, initial, capabilities).settings) }, label = { Text(preset.label) })
                 }
@@ -442,7 +494,7 @@ private fun HardwareTestResultDialog(
             capabilities.copiesRange?.let { OutlinedTextField(copiesText, { copiesText = it.filter(Char::isDigit).take(2) }, label = { Text("Количество копий (${it.value.first}–${it.value.last})") }, singleLine = true, modifier = Modifier.fillMaxWidth(), supportingText = { Text(it.disclosure) }) }
             if (pageKinds.isNotEmpty()) {
                 Text("Страницы", style = MaterialTheme.typography.labelLarge)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ResponsiveChoiceFlow {
                     if (ru.usbprint.domain.model.PageSelectionKind.ALL in pageKinds) FilterChip(pageMode is PageSelection.All, { pageMode = PageSelection.All }, label = { Text("Все") })
                     if (ru.usbprint.domain.model.PageSelectionKind.RANGES in pageKinds) FilterChip(pageMode is PageSelection.Ranges, { pageMode = PageSelection.Ranges("", emptyList()) }, label = { Text("Диапазон") })
                     if (ru.usbprint.domain.model.PageSelectionKind.ODD in pageKinds) FilterChip(pageMode is PageSelection.Odd, { pageMode = PageSelection.Odd }, label = { Text("Нечётные") })
@@ -453,7 +505,7 @@ private fun HardwareTestResultDialog(
             val customRange = capabilities.customPaperRangeMicrons
             if (capabilities.paperSizes != null || customRange != null) {
                 Text("Бумага", style = MaterialTheme.typography.labelLarge)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ResponsiveChoiceFlow {
                     capabilities.paperSizes?.let { values ->
                         (setOf(PaperSize.AUTO) + values.value).forEach { value ->
                             FilterChip(!customPaperEnabled && paper == value, { customPaperEnabled = false; paper = value }, label = { Text(value.label) })
@@ -471,7 +523,7 @@ private fun HardwareTestResultDialog(
                 capabilities.paperSizes?.let { Text(it.disclosure, style = MaterialTheme.typography.bodySmall) }
                 if (customPaperEnabled && customRange != null) {
                     Text("Единицы", style = MaterialTheme.typography.labelLarge)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ResponsiveChoiceFlow {
                         PaperUnit.entries.forEach { unit -> FilterChip(paperUnit == unit, {
                             val widthMicrons = parsePaperDimension(customWidth, paperUnit)
                             val heightMicrons = parsePaperDimension(customHeight, paperUnit)
@@ -494,7 +546,7 @@ private fun HardwareTestResultDialog(
             capabilities.duplexModes?.takeIf { it.value.any { mode -> mode != DuplexMode.OFF } }?.let { EnumChips("Двусторонняя · ${it.disclosure}", it.value, duplex, { duplex = it }) { value -> value.label } }
             capabilities.resolutions?.let { values ->
                 Text("Разрешение · ${values.disclosure}", style = MaterialTheme.typography.labelLarge)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { FilterChip(resolution == null, { resolution = null }, label = { Text("Авто") }); values.value.forEach { dpi -> FilterChip(resolution == dpi, { resolution = dpi }, label = { Text(dpi.displayName) }) } }
+                ResponsiveChoiceFlow { FilterChip(resolution == null, { resolution = null }, label = { Text("Авто") }); values.value.forEach { dpi -> FilterChip(resolution == dpi, { resolution = dpi }, label = { Text(dpi.displayName) }) } }
             }
             capabilities.mediaSourceOptions?.let { KeywordChips("Источник бумаги · ${it.disclosure}", it.value, mediaSourceKeyword) { value -> mediaSourceKeyword = value } }
             capabilities.mediaTypeOptions?.let { KeywordChips("Тип бумаги · ${it.disclosure}", it.value, mediaTypeKeyword) { value -> mediaTypeKeyword = value } }
@@ -505,9 +557,11 @@ private fun HardwareTestResultDialog(
             }
             if (capabilities.supportsMargins) {
                 Text("Поля пользователя, мм", style = MaterialTheme.typography.labelLarge)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    MarginField("Слева", marginLeft, { marginLeft = it }); MarginField("Сверху", marginTop, { marginTop = it })
-                    MarginField("Справа", marginRight, { marginRight = it }); MarginField("Снизу", marginBottom, { marginBottom = it })
+                AdaptiveTwoColumnFields { fieldModifier ->
+                    MarginField("Слева", marginLeft, { marginLeft = it }, fieldModifier)
+                    MarginField("Сверху", marginTop, { marginTop = it }, fieldModifier)
+                    MarginField("Справа", marginRight, { marginRight = it }, fieldModifier)
+                    MarginField("Снизу", marginBottom, { marginBottom = it }, fieldModifier)
                 }
                 capabilities.hardwareMargins?.let { Text("Физические поля: ${it.value.left}/${it.value.top}/${it.value.right}/${it.value.bottom} мм · ${it.disclosure}", style = MaterialTheme.typography.bodySmall) }
             }
@@ -534,8 +588,8 @@ private fun HardwareTestResultDialog(
             if (advancedMode) {
                 Text("Экспериментальные значения помечены в диагностике и не включаются автоматически.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                 Text("Принудительный backend", style = MaterialTheme.typography.labelLarge)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { FilterChip(override.forcedBackend == null, { override = override.copy(forcedBackend = null) }, label = { Text("Нет") }); compatibleBackends.forEach { id -> FilterChip(override.forcedBackend == id, { override = override.copy(forcedBackend = id) }, label = { Text(id.title) }) } }
-                capabilities.resolutions?.let { values -> FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { FilterChip(override.forcedResolution == null, { override = override.copy(forcedResolution = null) }, label = { Text("Авто DPI") }); values.value.forEach { dpi -> FilterChip(override.forcedResolution == dpi, { override = override.copy(forcedResolution = dpi) }, label = { Text("Force ${dpi.displayName}") }) } } }
+                ResponsiveChoiceFlow { FilterChip(override.forcedBackend == null, { override = override.copy(forcedBackend = null) }, label = { Text("Нет") }); compatibleBackends.forEach { id -> FilterChip(override.forcedBackend == id, { override = override.copy(forcedBackend = id) }, label = { Text(id.title) }) } }
+                capabilities.resolutions?.let { values -> ResponsiveChoiceFlow { FilterChip(override.forcedResolution == null, { override = override.copy(forcedResolution = null) }, label = { Text("Авто DPI") }); values.value.forEach { dpi -> FilterChip(override.forcedResolution == dpi, { override = override.copy(forcedResolution = dpi) }, label = { Text("Force ${dpi.displayName}") }) } } }
                 Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(override.forceMonochrome, { override = override.copy(forceMonochrome = it) }); Text("Принудительно монохром") }
                 OutlinedButton({ onSaveOverride(override) }, modifier = Modifier.fillMaxWidth()) { Text("Сохранить переопределение") }
             }
@@ -590,18 +644,18 @@ private fun formatPaperDimension(value: Microns, unit: PaperUnit): String {
 
 private fun paperNumberInput(value: String): String = value.replace(',', '.').filter { it.isDigit() || it == '.' }.take(10)
 
-@Composable private fun MarginField(label: String, value: String, onValue: (String) -> Unit) {
-    OutlinedTextField(value, { onValue(it.filter { c -> c.isDigit() || c == '.' }.take(5)) }, label = { Text(label) }, singleLine = true, modifier = Modifier.fillMaxWidth(0.47f))
+@Composable private fun MarginField(label: String, value: String, onValue: (String) -> Unit, modifier: Modifier = Modifier) {
+    OutlinedTextField(value, { onValue(it.filter { c -> c.isDigit() || c == '.' }.take(5)) }, label = { Text(label) }, singleLine = true, modifier = modifier)
 }
 
 @Composable private fun <T> EnumChips(title: String, items: Iterable<T>, selected: T, select: (T) -> Unit, label: (T) -> String) {
     Text(title, style = MaterialTheme.typography.labelLarge)
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { items.forEach { value -> FilterChip(selected == value, { select(value) }, label = { Text(label(value)) }) } }
+    ResponsiveChoiceFlow { items.forEach { value -> FilterChip(selected == value, { select(value) }, label = { Text(label(value)) }) } }
 }
 
 @Composable private fun KeywordChips(title: String, items: Iterable<PrinterKeywordOption>, selected: String?, select: (String?) -> Unit) {
     Text(title, style = MaterialTheme.typography.labelLarge)
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    ResponsiveChoiceFlow {
         FilterChip(selected == null, { select(null) }, label = { Text("Авто") })
         items.forEach { option ->
             FilterChip(selected == option.rawKeyword, { select(option.rawKeyword) }, label = { Text(option.localizedDisplayName) })
@@ -611,8 +665,8 @@ private fun paperNumberInput(value: String): String = value.replace(',', '.').fi
 
 @Composable private fun DiagnosticsDialog(text: String, logs: List<String>, onExportText: () -> Unit, onExportJson: () -> Unit, onDismiss: () -> Unit) {
     val clipboard = LocalClipboardManager.current
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("Информация о принтере") }, text = {
-        Column(Modifier.verticalScroll(rememberScrollState())) { Text(text, style = MaterialTheme.typography.bodySmall); if (logs.isNotEmpty()) { HorizontalDivider(Modifier.padding(vertical = 10.dp)); Text("Журнал", style = MaterialTheme.typography.labelLarge); Text(logs.joinToString("\n"), style = MaterialTheme.typography.bodySmall) } }
+    AlertDialog(modifier = Modifier.imePadding(), onDismissRequest = onDismiss, title = { Text("Информация о принтере") }, text = {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) { Text(text, style = MaterialTheme.typography.bodySmall); if (logs.isNotEmpty()) { HorizontalDivider(Modifier.padding(vertical = 10.dp)); Text("Журнал", style = MaterialTheme.typography.labelLarge); Text(logs.joinToString("\n"), style = MaterialTheme.typography.bodySmall) } }
     }, confirmButton = { Button(onClick = { clipboard.setText(androidx.compose.ui.text.AnnotatedString(text + "\n\n" + logs.joinToString("\n"))) }) { Text("Копировать") } }, dismissButton = { Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) { OutlinedButton(onClick = onExportText) { Text("Экспорт TXT") }; OutlinedButton(onClick = onExportJson) { Text("Экспорт JSON") }; OutlinedButton(onClick = onDismiss) { Text("Закрыть") } } })
 }
 
