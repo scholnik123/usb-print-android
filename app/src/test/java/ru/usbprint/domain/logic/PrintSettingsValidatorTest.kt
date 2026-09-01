@@ -12,4 +12,7 @@ class PrintSettingsValidatorTest {
         assertEquals("Количество копий должно быть от 1 до 99.", PrintSettingsValidator.validate(PrintSettings(copies = 0), 8))
         assertEquals("Диапазон страниц выходит за пределы документа.", PrintSettingsValidator.validate(PrintSettings(pageSelection = PageSelection.Ranges("9", listOf(9..9))), 8))
     }
+    @Test fun rejectsInvalidNUpSpacing() {
+        assertEquals("Интервал N-up должен быть от 0 до 20 мм.", PrintSettingsValidator.validate(PrintSettings(nUpSpacingMm = 21f), 8))
+    }
 }

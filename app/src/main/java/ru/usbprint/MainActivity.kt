@@ -50,6 +50,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -61,6 +62,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ru.usbprint.domain.logic.PageRangeParser
+import ru.usbprint.domain.logic.BackendRegistry
 import ru.usbprint.domain.logic.PrintPresetResolver
 import ru.usbprint.domain.model.BackendId
 import ru.usbprint.domain.model.ColorMode
@@ -344,6 +346,10 @@ private fun HardwareTestResultDialog(
     var position by remember(initial) { mutableStateOf(initial.contentPosition) }
     var order by remember(initial) { mutableStateOf(initial.pageOrder) }
     var collate by remember(initial) { mutableStateOf(initial.collate) }
+    var pagesPerSheet by remember(initial) { mutableIntStateOf(initial.pagesPerSheet) }
+    var nUpSpacing by remember(initial) { mutableStateOf(initial.nUpSpacingMm.toString()) }
+    var nUpBorders by remember(initial) { mutableStateOf(initial.nUpDrawBorders) }
+    var nUpAutoRotate by remember(initial) { mutableStateOf(initial.nUpAutoRotate) }
     var marginLeft by remember(initial) { mutableStateOf(initial.margins.left.toString()) }
     var marginTop by remember(initial) { mutableStateOf(initial.margins.top.toString()) }
     var marginRight by remember(initial) { mutableStateOf(initial.margins.right.toString()) }
@@ -352,6 +358,7 @@ private fun HardwareTestResultDialog(
     var override by remember(initialOverride) { mutableStateOf(initialOverride ?: ExperimentalPrinterOverride()) }
     val pageKinds = capabilities.pageSelections?.value.orEmpty()
     val enabled = capabilities.isPrintable
+    val nUpAvailable = capabilities.supportsNUp || compatibleBackends.any { BackendRegistry.descriptorFor(it).supportsNUp }
 
     AlertDialog(onDismissRequest = onDismiss, title = { Text("Настройки печати") }, text = {
         Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -408,6 +415,20 @@ private fun HardwareTestResultDialog(
             if (capabilities.supportsPositioning) EnumChips("Позиционирование", ContentPosition.entries, position, { position = it }) { it.label }
             if (capabilities.supportsPageOrder) EnumChips("Порядок", PageOrder.entries, order, { order = it }) { it.label }
             if (capabilities.supportsCollate) Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(collate, { collate = it }); Text("Разбирать по копиям") }
+            if (nUpAvailable) {
+                EnumChips("Страниц на физическом листе", listOf(1, 2, 4), pagesPerSheet, { pagesPerSheet = it }) { it.toString() }
+                if (pagesPerSheet > 1) {
+                    OutlinedTextField(
+                        nUpSpacing,
+                        { value -> nUpSpacing = value.filter { it.isDigit() || it == '.' }.take(5) },
+                        label = { Text("Интервал между страницами, мм (0–20)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(nUpBorders, { nUpBorders = it }); Text("Рамки вокруг логических страниц") }
+                    Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(nUpAutoRotate, { nUpAutoRotate = it }); Text("Автоповорот для лучшего заполнения") }
+                }
+            }
 
             HorizontalDivider()
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) { Column(Modifier.weight(1f)) { Text("Расширенные настройки", style = MaterialTheme.typography.labelLarge); Text("Только ручные экспериментальные переопределения для этого принтера.", style = MaterialTheme.typography.bodySmall) }; Switch(advancedMode, onAdvancedMode) }
@@ -428,13 +449,17 @@ private fun HardwareTestResultDialog(
         }
         val margins = listOf(marginLeft, marginTop, marginRight, marginBottom).map { it.toFloatOrNull() ?: return@Button }
         if (margins.any { it !in 0f..60f }) return@Button
+        val spacing = nUpSpacing.toFloatOrNull() ?: return@Button
+        if (spacing !in 0f..20f) return@Button
         onSave(initial.copy(
             copies = copiesText.toIntOrNull() ?: return@Button, pageSelection = selection, paperSize = paper,
             orientation = orientation, colorMode = color, duplexMode = duplex, scalingMode = scaling,
             resolutionDpi = resolution?.takeIf { it.horizontalDpi == it.verticalDpi }?.horizontalDpi, resolution = resolution,
             marginsMm = margins.first(), margins = ru.usbprint.domain.model.PrintMarginsMm(margins[0], margins[1], margins[2], margins[3]),
             contentPosition = position, customScalePercent = if (scaling == ScalingMode.CUSTOM) scaleText.toIntOrNull() else null,
-            pageOrder = order, collate = collate, mediaType = null, mediaSource = null, outputBin = null,
+            pageOrder = order, collate = collate, pagesPerSheet = pagesPerSheet,
+            nUpSpacingMm = spacing, nUpDrawBorders = nUpBorders, nUpAutoRotate = nUpAutoRotate,
+            mediaType = null, mediaSource = null, outputBin = null,
             mediaTypeKeyword = mediaTypeKeyword, mediaSourceKeyword = mediaSourceKeyword, outputBinKeyword = outputBinKeyword,
             preset = PrintPresetId.CUSTOM
         ))

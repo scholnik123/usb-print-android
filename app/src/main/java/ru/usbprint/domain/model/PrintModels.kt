@@ -74,8 +74,11 @@ data class PrintSettings(
     val customScalePercent: Int? = null,
     val pageOrder: PageOrder = PageOrder.NORMAL,
     val collate: Boolean = true,
-    /** 1, 2 or 4 logical pages on one physical sheet. Raster backends currently implement 1. */
+    /** 1, 2 or 4 logical pages composed by software onto one physical sheet. */
     val pagesPerSheet: Int = 1,
+    val nUpSpacingMm: Float = 3f,
+    val nUpDrawBorders: Boolean = false,
+    val nUpAutoRotate: Boolean = true,
     val mediaType: MediaType? = null,
     val mediaSource: MediaSource? = null,
     val outputBin: OutputBin? = null,

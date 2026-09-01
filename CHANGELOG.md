@@ -19,16 +19,20 @@ Development changes below are not part of the published 1.0.0 APK.
 - Conservative statuses: `UNTESTED`, `USER_CONFIRMED`, `MULTIPLE_TESTS_CONFIRMED`, `PARTIAL`, `FAILED`, and `NEEDS_REVALIDATION`
 - Automatic profile invalidation when a recorded backend encoder version or profile schema no longer matches, without deleting prior observations
 - User-triggered privacy-safe compatibility JSON export with app/Android version, printer model and VID/PID, backend/encoder, reported protocols, tested settings, and physical result
+- Software 2-up and 4-up physical-sheet composition for IPP PWG, PWG USB, PostScript Raster, and PCL 5 Raster
+- N-up spacing, optional slot borders, efficient per-page auto-rotation, explicit portrait/landscape grids, and persisted preset values
+- Physical-sheet preview driven by the same `NUpLayoutEngine` geometry used by raster output
 
 ### Changed
 
 - Software copies, page selection, paper, orientation, margins, scaling, positioning, color, and resolution are encoded in PWG output; copies and page ranges are not duplicated as IPP job attributes
 - Confirmed media source, media type, and output-bin keywords may pass through as IPP job attributes
 - IPP PWG rejects unimplemented raster encodings such as `srgb_16` instead of treating them as compatible
+- Page selection, reverse order, collated/uncollated copies, and then N-up grouping now form one deterministic pre-backend pipeline
 
 ### Validation
 
-- 97 JVM tests pass on the development branch; Android lint and debug assembly pass
+- 112 JVM tests pass on the development branch; Android lint and debug assembly pass
 - Hardware-tested printers remain 0; no physical IPP PWG compatibility is claimed
 
 ## 1.0.0 - 2026-08-31

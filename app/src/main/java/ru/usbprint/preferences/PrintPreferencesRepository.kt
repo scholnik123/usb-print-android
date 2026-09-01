@@ -101,6 +101,7 @@ object PrintSettingsCodec {
         put("margins", listOf(settings.margins.left, settings.margins.top, settings.margins.right, settings.margins.bottom).joinToString(","))
         put("position", settings.contentPosition.name); put("scale", settings.customScalePercent?.toString().orEmpty())
         put("order", settings.pageOrder.name); put("collate", settings.collate.toString()); put("nup", settings.pagesPerSheet.toString())
+        put("nupSpacing", settings.nUpSpacingMm.toString()); put("nupBorders", settings.nUpDrawBorders.toString()); put("nupRotate", settings.nUpAutoRotate.toString())
         put("mediaTypeKeyword", settings.mediaTypeKeyword.orEmpty()); put("mediaSourceKeyword", settings.mediaSourceKeyword.orEmpty())
         put("outputBinKeyword", settings.outputBinKeyword.orEmpty())
         when (val pages = settings.pageSelection) {
@@ -133,6 +134,8 @@ object PrintSettingsCodec {
             marginsMm = margins.first(), margins = PrintMarginsMm(margins[0], margins[1], margins[2], margins[3]),
             contentPosition = enum(map, "position", ContentPosition.CENTER), customScalePercent = map["scale"]?.toIntOrNull(),
             pageOrder = enum(map, "order", PageOrder.NORMAL), collate = map["collate"].toBoolean(), pagesPerSheet = map["nup"]?.toIntOrNull() ?: 1,
+            nUpSpacingMm = map["nupSpacing"]?.toFloatOrNull() ?: 3f,
+            nUpDrawBorders = map["nupBorders"].toBoolean(), nUpAutoRotate = map["nupRotate"]?.toBooleanStrictOrNull() ?: true,
             mediaTypeKeyword = map["mediaTypeKeyword"]?.takeIf(String::isNotBlank),
             mediaSourceKeyword = map["mediaSourceKeyword"]?.takeIf(String::isNotBlank),
             outputBinKeyword = map["outputBinKeyword"]?.takeIf(String::isNotBlank),

@@ -9,6 +9,7 @@ import ru.usbprint.domain.model.CapabilityValue
 import ru.usbprint.domain.model.ColorMode
 import ru.usbprint.domain.model.DocumentKind
 import ru.usbprint.domain.model.DocumentRef
+import ru.usbprint.domain.model.DuplexMode
 import ru.usbprint.domain.model.IppPrinterInfo
 import ru.usbprint.domain.model.PageSelection
 import ru.usbprint.domain.model.PaperSize
@@ -34,6 +35,17 @@ class PwgRasterJobPlannerTest {
         assertEquals(600, grayscale.dpi)
     }
 
+    @Test fun reportsComposedSheetCountAndLongVsShortEdgeDuplexHeaders() {
+        val longEdge = PwgRasterJobPlanner.plan(job(PrintSettings(pagesPerSheet = 4, duplexMode = DuplexMode.LONG_EDGE)), BackendId.IPP_PWG)
+        val shortEdge = PwgRasterJobPlanner.plan(job(PrintSettings(pagesPerSheet = 4, duplexMode = DuplexMode.SHORT_EDGE)), BackendId.IPP_PWG)
+
+        assertEquals(2, longEdge.physicalSheetCount)
+        assertEquals(true, longEdge.duplex)
+        assertEquals(false, longEdge.tumble)
+        assertEquals(true, shortEdge.duplex)
+        assertEquals(true, shortEdge.tumble)
+    }
+
     private fun job(settings: PrintSettings): PrintJob {
         val confirmed = { value: Set<PrinterResolution> -> CapabilityValue(value, CapabilitySource.IPP, CapabilityConfidence.CONFIRMED) }
         val capabilities = PrinterCapabilities(
@@ -43,6 +55,7 @@ class PwgRasterJobPlannerTest {
             reportedPaperSizes = CapabilityValue(setOf(PaperSize.A4), CapabilitySource.IPP, CapabilityConfidence.CONFIRMED),
             reportedResolutions = confirmed(setOf(PrinterResolution.DPI_300, PrinterResolution.DPI_600)),
             reportedColorModes = CapabilityValue(setOf(ColorMode.COLOR, ColorMode.GRAYSCALE, ColorMode.MONOCHROME), CapabilitySource.IPP, CapabilityConfidence.CONFIRMED),
+            reportedDuplexModes = CapabilityValue(setOf(DuplexMode.OFF, DuplexMode.LONG_EDGE, DuplexMode.SHORT_EDGE), CapabilitySource.IPP, CapabilityConfidence.CONFIRMED),
             ipp = IppPrinterInfo(
                 interfaceIds = setOf(1, 2),
                 operationsSupported = setOf(2),

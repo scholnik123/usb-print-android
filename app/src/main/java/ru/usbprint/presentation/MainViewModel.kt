@@ -5,6 +5,8 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -66,6 +68,7 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
     val logs = container.log.entries
     private val hardwareTestJobs = HardwareTestJobTracker()
     private var pendingHardwareTestJob: PrintJob? = null
+    private var previewJob: Job? = null
 
     init {
         container.printerController.start()
@@ -80,6 +83,7 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
                         verifiedPrinterProfile = current.verifiedPrinterProfile.takeIf { oldKey == newKey }
                     ))
                 }
+                refreshPreview(_state.value)
                 (usb as? UsbPrinterState.Ready)?.printer?.let { printer -> loadPrinterLocalState(printer.deviceKey) }
             }
         }
@@ -112,6 +116,7 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
     fun loadDocument(uri: Uri) = viewModelScope.launch { loadDocument(uri, isHardwareTest = false) }
 
     private suspend fun loadDocument(uri: Uri, isHardwareTest: Boolean) {
+        previewJob?.cancel()
         _state.update {
             it.copy(
                 isLoadingDocument = true,
@@ -126,7 +131,13 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
         }
         runCatching {
             val document = container.documents.inspect(uri)
-            document to container.documents.renderPreview(document)
+            val previewState = refreshed(_state.value.copy(document = document))
+            document to container.documents.renderPrintPreview(
+                document,
+                previewState.settings,
+                previewDpi(previewState),
+                previewState.effectiveCapabilities.hardwareMargins?.value ?: ru.usbprint.domain.model.HardwareMarginsMm.ZERO
+            )
         }.onSuccess { (document, preview) ->
             _state.update { current ->
                 refreshed(current.copy(document = document, preview = preview, isLoadingDocument = false))
@@ -153,18 +164,21 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     fun updateSettings(settings: PrintSettings) {
-        val pageCount = _state.value.document?.pageCount
+        val current = _state.value
+        val pageCount = current.document?.pageCount
         val rangeError = (settings.pageSelection as? PageSelection.Ranges)?.let { PageRangeParser.parse(it.raw, pageCount).exceptionOrNull() }
         if (rangeError != null) {
             _state.update { it.copy(error = AppError.INVALID_SETTINGS) }
             return
         }
-        val validation = PrintSettingsValidator.validate(settings, _state.value.effectiveCapabilities, pageCount)
+        val candidate = refreshed(current.copy(settings = settings, error = null))
+        val validation = PrintSettingsValidator.validate(settings, candidate.effectiveCapabilities, pageCount)
         if (validation is SettingsValidation.Invalid) {
             _state.update { it.copy(error = AppError.INVALID_SETTINGS) }
             return
         }
-        _state.update { current -> refreshed(current.copy(settings = settings, error = null)) }
+        _state.value = candidate
+        refreshPreview(candidate)
     }
 
     fun print() {
@@ -333,6 +347,7 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
             val currentKey = (current.usb as? UsbPrinterState.Ready)?.printer?.deviceKey
             if (currentKey == deviceKey) refreshed(current.copy(printerOverride = override, verifiedPrinterProfile = profile)) else current
         }
+        refreshPreview(_state.value)
     }
 
     private fun refreshed(current: MainUiState): MainUiState {
@@ -341,6 +356,36 @@ class MainViewModel(private val container: AppContainer) : ViewModel() {
             ?: EffectivePrintCapabilities.NONE
         return current.copy(backend = decision, effectiveCapabilities = effective)
     }
+
+    private fun refreshPreview(snapshot: MainUiState = _state.value) {
+        val document = snapshot.document ?: return
+        previewJob?.cancel()
+        previewJob = viewModelScope.launch {
+            try {
+                val preview = container.documents.renderPrintPreview(
+                    document,
+                    snapshot.settings,
+                    previewDpi(snapshot),
+                    snapshot.effectiveCapabilities.hardwareMargins?.value ?: ru.usbprint.domain.model.HardwareMarginsMm.ZERO
+                )
+                _state.update { current ->
+                    if (
+                        current.document?.uri == document.uri && current.settings == snapshot.settings &&
+                        current.backend.selected == snapshot.backend.selected && previewDpi(current) == previewDpi(snapshot) &&
+                        current.effectiveCapabilities.hardwareMargins?.value == snapshot.effectiveCapabilities.hardwareMargins?.value
+                    ) current.copy(preview = preview) else current
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (throwable: Throwable) {
+                _state.update { current -> current.copy(error = (throwable as? PrintException)?.error ?: AppError.RENDER_ERROR) }
+            }
+        }
+    }
+
+    private fun previewDpi(state: MainUiState): Int = state.settings.selectedResolution?.horizontalDpi
+        ?: state.effectiveCapabilities.resolutions?.value?.filter { it.horizontalDpi == it.verticalDpi }?.minByOrNull { it.horizontalDpi }?.horizontalDpi
+        ?: ru.usbprint.printing.PrintLayoutEngine.DEFAULT_DPI
 
     private fun diagnosticJson(text: String): String = buildString {
         append("{\n  \"application\": \"USB Print\",\n  \"version\": \"")

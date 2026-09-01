@@ -48,6 +48,12 @@ class BackendRegistryTest {
         val image = DocumentRef("content://test", "photo.png", "image/png", DocumentKind.IMAGE, pageCount = 1)
         assertEquals(BackendId.IPP_PWG, BackendRegistry.select(ippOnlyCapabilities(pwg = true), image).selected)
     }
+    @Test fun selectsComposingRasterBackendForNUp() {
+        val nUp = PrintSettings(pagesPerSheet = 2)
+        assertEquals(BackendId.IPP_PWG, BackendRegistry.select(ippOnlyCapabilities(pwg = true), pdf.copy(sizeBytes = 100), nUp).selected)
+        assertEquals(true, BackendRegistry.descriptorFor(BackendId.IPP_PWG).supportsNUp)
+        assertEquals(false, BackendRegistry.descriptorFor(BackendId.IPP_DIRECT).supportsNUp)
+    }
     @Test fun ippPwgRequiresPrintJobAndExactDocumentFormat() {
         val noOperation = ippOnlyCapabilities(pwg = true).let { it.copy(ipp = it.ipp.copy(operationsSupported = emptySet())) }
         val noFormat = ippOnlyCapabilities(pwg = true).let { it.copy(ipp = it.ipp.copy(documentFormatsSupported = setOf("application/pdf"))) }

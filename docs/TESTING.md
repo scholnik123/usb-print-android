@@ -20,7 +20,7 @@ Windows:
 .\gradlew.bat assembleDebug
 ```
 
-The first public release baseline is 61 JVM tests. The development branch baseline after IPP PWG, hardware-test profiles, and compatibility export is 97 JVM tests. The number is not a target by itself; wire boundaries, protocol selection, cleanup, state transitions, privacy invariants, and overflow behavior are the important coverage.
+The first public release baseline is 61 JVM tests. The development branch baseline after IPP PWG, hardware-test profiles/export, and N-up is 112 JVM tests. The number is not a target by itself; wire boundaries, protocol selection, cleanup, state transitions, privacy invariants, layout ordering, and overflow behavior are the important coverage.
 
 ## JVM and unit tests
 
@@ -30,6 +30,7 @@ The unit suite covers:
 - backend selection and effective capability intersection;
 - settings validation, page ranges, copies, collation, odd/even, and reverse ordering;
 - physical page layout, margins, positioning, scaling, and memory policy;
+- 2-up/4-up grouping, odd final sheets, range/reverse, collated and uncollated copies, portrait/landscape grids, spacing, borders, auto-rotation, and duplex planning;
 - USB partial-write handling;
 - MIME/document classification and DataStore-compatible domain behavior.
 
@@ -61,8 +62,9 @@ The unit suite covers:
 - Encoder-version invalidation to `NEEDS_REVALIDATION` while retaining historical observations
 - Deterministic profile codec round trip for Unicode/reserved characters and malformed-record rejection
 - Compatibility JSON required-field/escaping checks and explicit exclusion of actual identity hash, raw identifiers, notes, document metadata, URI, filename, and payload
+- N-up preset codec round trip and safe defaults when decoding presets saved before N-up options existed
 
-The Compose dialog is not covered by an Android connected test because no emulator/device target is available. This remains `NOT RUN`, not a passed UI test.
+The Compose dialogs and Canvas N-up preview are not covered by an Android connected test because no emulator/device target is available. This remains `NOT RUN`, not a passed UI test.
 
 ## Golden and invariant tests
 

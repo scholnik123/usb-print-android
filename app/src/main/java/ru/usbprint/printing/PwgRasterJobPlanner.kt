@@ -13,17 +13,23 @@ import ru.usbprint.domain.model.PrintJob
 
 data class PwgRasterJobPlan(
     val pages: List<Int>,
+    val pagesPerSheet: Int,
     val colorMode: RasterColorMode,
     val dpi: Int,
     val duplex: Boolean,
     val tumble: Boolean,
     val hardwareMargins: HardwareMarginsMm
-)
+) {
+    val physicalSheetCount: Int get() = (pages.size + pagesPerSheet - 1) / pagesPerSheet
+}
 
 /** Resolves software-encoded PWG settings once for both legacy USB and IPP destinations. */
 object PwgRasterJobPlanner {
     fun plan(job: PrintJob, capabilityBackend: BackendId): PwgRasterJobPlan {
         val effective = BackendRegistry.effectiveFor(capabilityBackend, job.printer.capabilities)
+        if (job.settings.pagesPerSheet !in setOf(1, 2, 4) || job.settings.pagesPerSheet > 1 && !effective.supportsNUp) {
+            throw PrintException(AppError.INVALID_SETTINGS)
+        }
         val pages = PrintPagePlanner.plan(job.settings, job.document.pageCount ?: 1)
         if (pages.isEmpty()) throw PrintException(AppError.INVALID_SETTINGS)
 
@@ -50,6 +56,7 @@ object PwgRasterJobPlanner {
         if (duplexMode !in effective.duplexModes?.value.orEmpty()) throw PrintException(AppError.INVALID_SETTINGS)
         return PwgRasterJobPlan(
             pages = pages,
+            pagesPerSheet = job.settings.pagesPerSheet,
             colorMode = rasterColor,
             dpi = resolution.horizontalDpi,
             duplex = duplexMode != DuplexMode.OFF,
@@ -70,18 +77,18 @@ object PwgRasterDocumentWriter {
         isCancelled: () -> Boolean = { false }
     ) {
         documents.createRenderer(job.document).use { renderer ->
+            val sheets = try {
+                NUpLayoutEngine.plan(job.settings, renderer.pageCount, renderer::pageSize, plan.dpi, plan.hardwareMargins)
+            } catch (badDimension: IllegalArgumentException) {
+                throw PrintException(AppError.OUT_OF_MEMORY_PREVENTED, badDimension)
+            }
             PwgRasterProducer.write(
-                pages = plan.pages,
-                openPage = { page ->
-                    val (sourceWidth, sourceHeight) = renderer.pageSize(page - 1)
-                    val layout = try {
-                        PrintLayoutEngine.create(job.settings, sourceWidth, sourceHeight, plan.dpi, plan.hardwareMargins)
-                    } catch (badDimension: IllegalArgumentException) {
-                        throw PrintException(AppError.OUT_OF_MEMORY_PREVENTED, badDimension)
-                    }
-                    val source = RasterPageSource(renderer, page - 1, layout, plan.colorMode)
+                pages = sheets.indices.toList(),
+                openPage = { sheetIndex ->
+                    val sheet = sheets[sheetIndex]
+                    val source = NUpRasterPageSource(renderer, sheet, plan.colorMode)
                     object : PwgRasterPage {
-                        override val header = PwgRasterHeader(layout, plan.colorMode, plan.duplex, plan.tumble)
+                        override val header = PwgRasterHeader(sheet.layout, plan.colorMode, plan.duplex, plan.tumble)
                         override fun renderRow(rowIndex: Int, destination: ByteArray) = source.renderRow(rowIndex, destination)
                         override fun close() = source.close()
                     }

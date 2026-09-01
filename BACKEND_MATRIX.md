@@ -23,7 +23,7 @@
 | Black only | NO | YES | PARTIAL | YES | YES | YES | NO | YES | N/A |
 | Duplex | NO | YES | YES | YES | YES | YES | NO | NO | N/A |
 | Resolution | NO | YES | PARTIAL | YES | YES | YES | NO | PARTIAL | N/A |
-| N-up | NO | NO | NO | NO | NO | NO | NO | NO | NO |
+| N-up | NO | NO | YES | YES | YES | YES | NO | NO | NO |
 | Media source | NO | YES | YES | NO | NO | NO | NO | NO | NO |
 | Media type | NO | YES | YES | NO | NO | NO | NO | NO | NO |
 | Output bin | NO | YES | YES | NO | NO | NO | NO | NO | NO |
@@ -39,6 +39,7 @@
 - IPP Direct — HTTP/1.1 + binary IPP `Print-Job` поверх protocol-4 USB interface. Range/odd/even зависят от `page-ranges-supported`; status/cancel — от job reference и `operations-supported`.
 - IPP PWG — development backend: локально кодирует physical pages и отправляет один exact-length `image/pwg-raster` Print-Job. Auto требует подтверждённые Print-Job, MIME, совместимые 300/600 DPI и один из реально кодируемых типов `black_1`, `sgray_8`, `srgb_8`. Color/resolution отмечены PARTIAL из-за этого намеренно узкого encoder subset.
 - IPP PWG spool ограничен 512 MiB, хранится только в app cache и удаляется после success/error/cancel; copies/page ranges не дублируются IPP attributes.
+- N-up `YES` означает software composition 1/2/4 до encoder: диапазон/порядок/копии → физические листы, с интервалом, рамками и автоповоротом. Preview использует ту же layout-модель. Это не означает hardware verification.
 - PWG USB — complete stream покрыт внутренним golden inspector, но внешняя CUPS validation и hardware test отсутствуют.
 - PostScript — Level 2 raster subset, не полный PostScript driver.
 - PCL5 — только явно заявленный PCL 5-compatible CMD, не PCL XL-only; media codes ограничены.

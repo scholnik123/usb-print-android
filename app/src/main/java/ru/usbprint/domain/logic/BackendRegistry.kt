@@ -243,7 +243,8 @@ object BackendRegistry {
         supportsPositioning = true,
         supportsScaling = true,
         supportsCollate = true,
-        supportsPageOrder = true
+        supportsPageOrder = true,
+        supportsNUp = true
     )
 
     private fun <T> intersectOrFallback(reported: CapabilityValue<Set<T>>?, backend: Set<T>, fallback: Set<T>, overridden: Boolean): CapabilityValue<Set<T>>? {

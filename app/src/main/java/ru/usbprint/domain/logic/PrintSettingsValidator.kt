@@ -33,6 +33,7 @@ object PrintSettingsValidator {
         if (!effective.supportsMargins && settings.margins != PrintSettings().margins) errors += "Поля не поддерживаются выбранным backend."
         if (settings.pagesPerSheet !in setOf(1, 2, 4)) errors += "На листе может быть 1, 2 или 4 страницы."
         if (settings.pagesPerSheet > 1 && !effective.supportsNUp) errors += "N-up ещё не реализован для выбранного backend."
+        if (!settings.nUpSpacingMm.isFinite() || settings.nUpSpacingMm !in 0f..20f) errors += "Интервал N-up должен быть от 0 до 20 мм."
         if (!settings.collate && !effective.supportsCollate) errors += "Разборка по копиям недоступна для выбранного backend."
         if (settings.pageOrder != ru.usbprint.domain.model.PageOrder.NORMAL && !effective.supportsPageOrder) errors += "Обратный порядок страниц недоступен для выбранного backend."
         if (settings.mediaType != null && settings.mediaType !in effective.mediaTypes?.value.orEmpty()) errors += "Тип носителя не подтверждён."
@@ -53,6 +54,7 @@ object PrintSettingsValidator {
         if (settings.copies !in 1..99) return "Количество копий должно быть от 1 до 99."
         if (settings.marginsMm !in 0f..30f || listOf(settings.margins.left, settings.margins.top, settings.margins.right, settings.margins.bottom).any { it !in 0f..60f }) return "Поля должны быть в допустимых пределах."
         if (settings.scalingMode == ScalingMode.CUSTOM && settings.effectiveScalePercent == null) return "Пользовательский масштаб должен быть от 10 до 400%."
+        if (!settings.nUpSpacingMm.isFinite() || settings.nUpSpacingMm !in 0f..20f) return "Интервал N-up должен быть от 0 до 20 мм."
         if (pageCount != null && settings.pageSelection is PageSelection.Ranges) {
             val ranges = settings.pageSelection.pages
             if (ranges.isEmpty() || ranges.any { it.first < 1 || it.last > pageCount }) return "Диапазон страниц выходит за пределы документа."

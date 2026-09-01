@@ -114,6 +114,18 @@ IPP PWG доступен в development branch только при одновр�
 
 Page range, odd/even, reverse order, copies, collate, paper, orientation, margins, fit/fill/actual/custom scale, positioning, color mode и resolution применяются software-side до/при создании PWG payload. Поэтому `copies`, `page-ranges`, `media`, `orientation-requested`, `print-color-mode`, `printer-resolution`, `sides` и `multiple-document-handling` не отправляются повторно в IPP и не могут примениться дважды.
 
+## Software N-up
+
+На development branch IPP PWG, PWG USB, PostScript Raster и PCL 5 Raster принимают уже составленный физический лист. Порядок строго фиксирован:
+
+```text
+page selection → reverse order → collated/uncollated copies → chunks of 1/2/4 → physical raster sheet → backend
+```
+
+Для 2-up книжный лист использует сетку 1×2, альбомный — 2×1; 4-up использует 2×2. `AUTO` сравнивает полезный fit книжного и альбомного листа, а опциональный поворот каждой логической страницы на 90° применяется только когда увеличивает её fit в слоте. Интервал 0–20 мм, рамки, positioning и существующие fit/fill/actual/custom scale входят в общий `NUpLayoutEngine` result.
+
+Preview рисует первый физический лист из того же набора `NUpSheet/NUpSlot`, что потребляют encoders; отдельной preview-математики нет. Direct PDF/IPP, ESC/POS и RAW не получают составленный лист и сохраняют `supportsNUp = false`.
+
 Только `media-source`, `media-type` и `output-bin` проходят как Job Template attributes, причём лишь если их имена были получены в `job-creation-attributes-supported`, а exact keyword прошёл повторную validation.
 
 PWG создаётся один раз в unique file каталога `cache/ipp-pwg-spool`. Размер ограничен 512 MiB. После завершения generation известный exact file length используется в HTTP Content-Length; затем файл streaming-читается в единственный Print-Job. Spool удаляется после success, protocol/HTTP error и cancel. Оставшиеся после аварийного завершения файлы удаляются при создании application container.
@@ -126,7 +138,7 @@ IEEE-1284 `CMD` продолжает выбирать только реализ�
 
 ## UI и DataStore
 
-Динамические IPP меню source/type/bin появляются у IPP Direct и IPP PWG только при полученных options. Exact raw keyword и asymmetric resolution сохраняются в DataStore codec; отсутствующие nullable поля старых локальных presets читаются с default `null` и не вызывают migration crash.
+Динамические IPP меню source/type/bin появляются у IPP Direct и IPP PWG только при полученных options. Exact raw keyword, asymmetric resolution и N-up spacing/border/auto-rotate сохраняются в DataStore codec; отсутствующие N-up поля старых локальных presets получают безопасные defaults и не вызывают migration crash.
 
 Hidden stale IPP keyword очищается при сохранении настроек backend, который не предоставляет соответствующий option. Validator повторно проверяет raw keyword, paper, resolution, color, duplex, copies и pages перед созданием job.
 
@@ -136,7 +148,6 @@ Hidden stale IPP keyword очищается при сохранении наст
 - IPP PWG external CUPS/ipptool validation и physical printer verification;
 - полноценный долговременный job monitor после закрытия foreground service;
 - UI ввода custom width/height, несмотря на готовое confirmed range mapping;
-- software N-up 2/4;
 - PCLm;
 - automatic promotion of stored hardware evidence into selectable printer capabilities;
 - per-value provenance внутри одного mixed set (например, `AUTO` и confirmed orientations).

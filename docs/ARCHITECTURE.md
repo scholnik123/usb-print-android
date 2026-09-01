@@ -30,7 +30,7 @@ flowchart TB
 
 ### Domain
 
-`domain/model/` contains documents, jobs, settings, printer capabilities, capability provenance, and backend identifiers. `domain/logic/` validates settings, plans page order, resolves presets, intersects capabilities, and chooses a backend before transmission.
+`domain/model/` contains documents, jobs, settings, printer capabilities, capability provenance, and backend identifiers. `domain/logic/` validates settings, plans logical page order/copies, resolves presets, intersects capabilities, and chooses a backend before transmission.
 
 ### Document and rendering
 
@@ -38,7 +38,7 @@ flowchart TB
 
 ### Printing
 
-`printing/` owns the foreground service, one-job store/executor, page layout, raster memory policy, raster row source, backend implementations, and protocol-specific pure encoders.
+`printing/` owns the foreground service, one-job store/executor, physical page and N-up layout, raster memory policy, raster row composition, backend implementations, and protocol-specific pure encoders.
 
 ### IPP
 
@@ -76,6 +76,21 @@ flowchart LR
 ```
 
 Only one job is active. A backend fallback is allowed during selection, before transmission. After any job bytes are sent, automatic fallback is forbidden to avoid duplicate physical output.
+
+For composing raster backends, document pages take this additional path before protocol encoding:
+
+```mermaid
+flowchart LR
+    A[Page selection] --> B[Order and copies]
+    B --> C[PrintPagePlanner logical pages]
+    C --> D[NUpLayoutEngine groups 1/2/4]
+    D --> E[NUpSheet / NUpSlot geometry]
+    E --> F[Preview Canvas]
+    E --> G[NUpRasterPageSource rows]
+    G --> H[PWG / PostScript / PCL 5]
+```
+
+The preview and output branches share `NUpSheet/NUpSlot`; only pixel resolution and the final renderer differ. Direct and passthrough backends bypass this composition and do not declare N-up support.
 
 ## Capability pipeline
 
@@ -121,7 +136,7 @@ IPP-over-USB requires USB bulk IN/OUT interfaces and does not require Wi-Fi or t
 
 ## Memory model
 
-Target raster data is streamed row by row. `RasterPageSource` keeps a bounded source bitmap and one output row rather than a full multi-page target job. Checked `Long` arithmetic and explicit dimension/pixel limits reject unsafe layouts before allocation.
+Target raster data is streamed row by row. `RasterPageSource` keeps a bounded source bitmap and one output row rather than a full multi-page target job. `NUpRasterPageSource` opens slot bitmaps lazily and releases each source after its clipped vertical region, so a complete multi-page target job is never resident. Checked `Long` arithmetic and explicit dimension/pixel limits reject unsafe layouts before allocation.
 
 IPP PWG additionally uses disk-backed spooling because HTTP requires Content-Length before transmission. The spool is unique, app-private, limited to 512 MiB, never loaded as one byte array, and removed deterministically after the request. Startup cleanup covers process death between creation and normal close.
 

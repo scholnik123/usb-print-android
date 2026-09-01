@@ -25,7 +25,7 @@ Download the current APK from [GitHub Releases](https://github.com/scholnik123/u
 
 The first public APK is debug-signed and intended for direct installation and testing. A production signing key is not included in this repository.
 
-> **Development branch:** `codex/development` contains IPP PWG Raster Print-Job support completed after 1.0.0. It is not part of the published 1.0.0 APK and has not yet been validated on a physical printer.
+> **Development branch:** `codex/development` contains IPP PWG Raster Print-Job, explicit hardware-result profiles/export, and software 2-up/4-up completed after 1.0.0. These changes are not part of the published 1.0.0 APK and have not yet been validated on a physical printer.
 
 ## Features
 
@@ -77,10 +77,11 @@ Legacy Printer Class devices use IEEE-1284 `CMD` detection plus clearly labelled
 - Duplex when confirmed by the printer
 - Exact printer resolution, including asymmetric IPP values
 - Margins, fit/fill/actual/custom scale, and content positioning for raster paths
+- Software 1/2/4 pages per physical sheet, with spacing, optional borders, and efficient auto-rotation on composing raster paths
 - Printer-reported media source, media type, and output bin for IPP backends
 - Built-in and local custom presets
 
-Available settings depend on the printer and selected backend. N-up is not presented because the compositor is not implemented.
+Available settings depend on the printer and selected backend. N-up is presented only when selection can move to IPP PWG, PWG USB, PostScript Raster, or PCL 5 Raster; direct, ESC/POS, and RAW paths do not advertise it.
 
 ## Printing backends
 
@@ -194,7 +195,7 @@ The APK is generated at `app/build/outputs/apk/debug/app-debug.apk`.
 
 ## Validation
 
-The first public release passes 61 JVM tests covering IPP wire format and malformed input, HTTP framing, capability mapping, USB discovery, PWG/PCL/PostScript invariants, page planning, and raster memory calculations. The development branch passes 97 JVM tests after adding exact-length IPP PWG coverage, the hardware-test workflow, versioned profiles, encoder revalidation, and privacy-safe export checks.
+The first public release passes 61 JVM tests covering IPP wire format and malformed input, HTTP framing, capability mapping, USB discovery, PWG/PCL/PostScript invariants, page planning, and raster memory calculations. The development branch passes 112 JVM tests after adding exact-length IPP PWG coverage, the hardware-test workflow, versioned profiles/export, and deterministic N-up planning/settings checks.
 
 Internal golden/invariant tests are not equivalent to external validation through CUPS, Ghostscript, or ipptool, and they are not a substitute for physical printer testing. See [VALIDATION_REPORT.md](VALIDATION_REPORT.md) and [docs/TESTING.md](docs/TESTING.md).
 
@@ -205,7 +206,7 @@ Internal golden/invariant tests are not equivalent to external validation throug
 - No hardware-verified printers have been recorded for this release.
 - IPP PWG is implemented only on the development branch and still lacks external reference-tool and physical-printer validation; Create-Job + Send-Document is not implemented.
 - PCLm, PCL XL/PCL6, URF, and vendor-specific protocols are not implemented.
-- N-up is not implemented.
+- Software N-up is limited to 1, 2, or 4 logical pages and the four composing raster backends; connected-device preview/printing validation is still not run.
 - IPP custom-paper ranges may be detected, but custom-size UI and job encoding are incomplete.
 - Compatibility JSON must still be reviewed and submitted by the user; the application never publishes it automatically.
 - Office formats require conversion to PDF.
@@ -222,7 +223,6 @@ See [COMPATIBILITY.md](COMPATIBILITY.md) for evidence levels and the reporting t
 - Physical printer validation and evidence-backed compatibility reports
 - Physical-printer validation of the development IPP PWG Raster path
 - Profile history/review management UI
-- N-up composition
 - Complete custom-paper workflow
 - PCLm and expanded standards-based compatibility
 

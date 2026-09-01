@@ -92,7 +92,7 @@ class IppPwgBackend(
             jobName = job.document.displayName,
             settings = job.settings,
             supportedAttributeNames = ipp.jobCreationAttributesSupported,
-            pageCount = plan.pages.size,
+            pageCount = plan.physicalSheetCount,
             producer = PwgSpoolProducer { writeBytes ->
                 PwgRasterDocumentWriter.write(
                     job = job,
