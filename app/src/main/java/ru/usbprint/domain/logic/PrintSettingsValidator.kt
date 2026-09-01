@@ -1,12 +1,15 @@
 package ru.usbprint.domain.logic
 
 import ru.usbprint.domain.model.ColorMode
+import ru.usbprint.domain.model.BackendId
+import ru.usbprint.domain.model.CustomPaperSizeMicrons
 import ru.usbprint.domain.model.DuplexMode
 import ru.usbprint.domain.model.EffectivePrintCapabilities
 import ru.usbprint.domain.model.PageSelection
 import ru.usbprint.domain.model.PageSelectionKind
 import ru.usbprint.domain.model.PaperSize
 import ru.usbprint.domain.model.PrintSettings
+import ru.usbprint.domain.model.RasterDimensionLimits
 import ru.usbprint.domain.model.ScalingMode
 
 sealed interface SettingsValidation {
@@ -25,6 +28,7 @@ object PrintSettingsValidator {
         val selectedKind = settings.pageSelection.kind()
         if (selectedKind !in effective.pageSelections?.value.orEmpty()) errors += "Выбранный режим страниц недоступен для ${effective.backendId.title}."
         if (settings.paperSize != PaperSize.AUTO && settings.paperSize !in effective.paperSizes?.value.orEmpty()) errors += "Формат ${settings.paperSize.label} не подтверждён для выбранного принтера и backend."
+        validateCustomPaper(settings, effective)?.let(errors::add)
         if (settings.orientation != ru.usbprint.domain.model.Orientation.AUTO && settings.orientation !in effective.orientations?.value.orEmpty()) errors += "Ориентация недоступна для выбранного backend."
         if (settings.colorMode != ColorMode.AUTO && settings.colorMode !in effective.colorModes?.value.orEmpty()) errors += "Выбранный цветовой режим не подтверждён."
         if (settings.duplexMode != DuplexMode.OFF && settings.duplexMode !in effective.duplexModes?.value.orEmpty()) errors += "Двусторонняя печать не подтверждена."
@@ -54,6 +58,7 @@ object PrintSettingsValidator {
         if (settings.copies !in 1..99) return "Количество копий должно быть от 1 до 99."
         if (settings.marginsMm !in 0f..30f || listOf(settings.margins.left, settings.margins.top, settings.margins.right, settings.margins.bottom).any { it !in 0f..60f }) return "Поля должны быть в допустимых пределах."
         if (settings.scalingMode == ScalingMode.CUSTOM && settings.effectiveScalePercent == null) return "Пользовательский масштаб должен быть от 10 до 400%."
+        if (settings.customPaperSize != null && settings.paperSize != PaperSize.AUTO) return "Для своего размера нельзя одновременно выбирать стандартный формат."
         if (!settings.nUpSpacingMm.isFinite() || settings.nUpSpacingMm !in 0f..20f) return "Интервал N-up должен быть от 0 до 20 мм."
         if (pageCount != null && settings.pageSelection is PageSelection.Ranges) {
             val ranges = settings.pageSelection.pages
@@ -62,10 +67,48 @@ object PrintSettingsValidator {
         return null
     }
 
+    private fun validateCustomPaper(settings: PrintSettings, effective: EffectivePrintCapabilities): String? {
+        val custom = settings.customPaperSize ?: return null
+        if (settings.paperSize != PaperSize.AUTO) return "Для своего размера нельзя одновременно выбирать стандартный формат."
+        val range = effective.customPaperRangeMicrons?.value
+            ?: return "Свой размер доступен только при подтверждённом IPP custom media range."
+        if (custom.width.value !in range.minWidth.value..range.maxWidth.value || custom.height.value !in range.minHeight.value..range.maxHeight.value) {
+            return "Свой размер выходит за подтверждённый принтером диапазон."
+        }
+        if (!marginsFit(custom, settings, effective)) return "Поля не помещаются в выбранный размер бумаги."
+        if (effective.backendId in RASTER_CUSTOM_MEDIA_BACKENDS) {
+            val dpi = settings.selectedResolution?.takeIf { it.horizontalDpi == it.verticalDpi }?.horizontalDpi
+                ?: effective.resolutions?.value?.filter { it.horizontalDpi == it.verticalDpi }?.minByOrNull { it.horizontalDpi }?.horizontalDpi
+                ?: return "Для raster custom paper требуется подтверждённое симметричное разрешение."
+            val safe = runCatching {
+                val width = RasterDimensionLimits.pixels(custom.width, dpi)
+                val height = RasterDimensionLimits.pixels(custom.height, dpi)
+                RasterDimensionLimits.requireSafePage(width, height)
+            }.isSuccess
+            if (!safe) return "Свой размер и разрешение превышают безопасный raster budget."
+        }
+        return null
+    }
+
+    private fun marginsFit(custom: CustomPaperSizeMicrons, settings: PrintSettings, effective: EffectivePrintCapabilities): Boolean {
+        val hardware = effective.hardwareMargins?.value ?: ru.usbprint.domain.model.HardwareMarginsMm.ZERO
+        val horizontal = ((settings.margins.left + settings.margins.right + hardware.left + hardware.right) * 1_000).toLong()
+        val vertical = ((settings.margins.top + settings.margins.bottom + hardware.top + hardware.bottom) * 1_000).toLong()
+        val normal = custom.width.value > horizontal && custom.height.value > vertical
+        val landscape = custom.height.value > horizontal && custom.width.value > vertical
+        return when (settings.orientation) {
+            ru.usbprint.domain.model.Orientation.PORTRAIT -> normal
+            ru.usbprint.domain.model.Orientation.LANDSCAPE -> landscape
+            ru.usbprint.domain.model.Orientation.AUTO -> normal && landscape
+        }
+    }
+
     private fun PageSelection.kind() = when (this) {
         PageSelection.All, PageSelection.Current -> PageSelectionKind.ALL
         PageSelection.Odd -> PageSelectionKind.ODD
         PageSelection.Even -> PageSelectionKind.EVEN
         is PageSelection.Ranges -> PageSelectionKind.RANGES
     }
+
+    private val RASTER_CUSTOM_MEDIA_BACKENDS = setOf(BackendId.IPP_PWG)
 }

@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.map
 import ru.usbprint.domain.logic.PageRangeParser
 import ru.usbprint.domain.model.BackendId
 import ru.usbprint.domain.model.ColorMode
+import ru.usbprint.domain.model.CustomPaperSizeMicrons
 import ru.usbprint.domain.model.ContentPosition
 import ru.usbprint.domain.model.DuplexMode
 import ru.usbprint.domain.model.ExperimentalPrinterOverride
@@ -21,6 +22,7 @@ import ru.usbprint.domain.model.PageOrder
 import ru.usbprint.domain.model.PageSelection
 import ru.usbprint.domain.model.PaperSize
 import ru.usbprint.domain.model.PrintMarginsMm
+import ru.usbprint.domain.model.Microns
 import ru.usbprint.domain.model.PrintPresetId
 import ru.usbprint.domain.model.PrintQuality
 import ru.usbprint.domain.model.PrinterResolution
@@ -95,6 +97,7 @@ class PrintPreferencesRepository(private val context: Context) {
 object PrintSettingsCodec {
     fun encode(name: String, settings: PrintSettings): String = buildMap<String, String> {
         put("name", name); put("copies", settings.copies.toString()); put("paper", settings.paperSize.name)
+        put("customWidthMicrons", settings.customPaperSize?.width?.value?.toString().orEmpty()); put("customHeightMicrons", settings.customPaperSize?.height?.value?.toString().orEmpty())
         put("orientation", settings.orientation.name); put("color", settings.colorMode.name); put("duplex", settings.duplexMode.name)
         put("scaling", settings.scalingMode.name); put("quality", settings.quality.name); put("dpi", settings.resolutionDpi?.toString().orEmpty())
         put("xdpi", settings.resolution?.horizontalDpi?.toString().orEmpty()); put("ydpi", settings.resolution?.verticalDpi?.toString().orEmpty())
@@ -126,8 +129,11 @@ object PrintSettingsCodec {
             else -> PageSelection.All
         }
         val exactResolution = map["xdpi"]?.toIntOrNull()?.let { x -> map["ydpi"]?.toIntOrNull()?.let { y -> PrinterResolution(x, y) } }
+        val customPaper = map["customWidthMicrons"]?.toLongOrNull()?.let { width ->
+            map["customHeightMicrons"]?.toLongOrNull()?.let { height -> CustomPaperSizeMicrons(Microns(width), Microns(height)) }
+        }
         map.getValue("name") to PrintSettings(
-            copies = map.getValue("copies").toInt(), pageSelection = pages, paperSize = enum(map, "paper", PaperSize.AUTO),
+            copies = map.getValue("copies").toInt(), pageSelection = pages, paperSize = enum(map, "paper", PaperSize.AUTO), customPaperSize = customPaper,
             orientation = enum(map, "orientation", Orientation.AUTO), colorMode = enum(map, "color", ColorMode.AUTO),
             duplexMode = enum(map, "duplex", DuplexMode.OFF), scalingMode = enum(map, "scaling", ScalingMode.FIT),
             quality = enum(map, "quality", PrintQuality.NORMAL), resolutionDpi = map["dpi"]?.toIntOrNull(), resolution = exactResolution,

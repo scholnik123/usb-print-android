@@ -8,13 +8,17 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import ru.usbprint.domain.model.AppError
 import ru.usbprint.domain.model.PrintException
 import ru.usbprint.domain.model.ColorMode
+import ru.usbprint.domain.model.CustomPaperSizeMicrons
 import ru.usbprint.domain.model.DuplexMode
 import ru.usbprint.domain.model.Orientation
+import ru.usbprint.domain.model.HardwareMarginsMm
+import ru.usbprint.domain.model.Microns
 import ru.usbprint.domain.model.PaperSize
 import ru.usbprint.domain.model.PrintSettings
 import ru.usbprint.domain.model.PrinterResolution
@@ -118,6 +122,41 @@ class IppHttpAndClientTest {
         }
         val error = runCatching { IppClient(session).getPrinterAttributes() }.exceptionOrNull() as PrintException
         assertEquals(AppError.IPP_VERSION_NOT_SUPPORTED, error.error)
+    }
+
+    @Test fun customPaperUsesConfirmedMediaColMembersOnly() = runBlocking {
+        var captured = ByteArray(0)
+        val session = object : IppSession {
+            override suspend fun exchange(ippData: ByteArray, document: InputStream?, documentLength: Long, isCancelled: () -> Boolean): ByteArray {
+                captured = ippData
+                val id = ((ippData[4].toInt() and 0xff) shl 24) or ((ippData[5].toInt() and 0xff) shl 16) or ((ippData[6].toInt() and 0xff) shl 8) or (ippData[7].toInt() and 0xff)
+                return successResponse(id)
+            }
+        }
+        val settings = PrintSettings(
+            customPaperSize = CustomPaperSizeMicrons(Microns(100_000), Microns(150_000)),
+            mediaSourceKeyword = "tray-2",
+            mediaTypeKeyword = "cardstock"
+        )
+
+        IppClient(session).printJob(
+            document = ByteArrayInputStream(byteArrayOf(1)), documentLength = 1, documentFormat = "application/pdf", jobName = "custom.pdf",
+            settings = settings, supportedAttributeNames = setOf("media-col", "media-source", "media-type"), pageCount = 1,
+            mediaColSupported = setOf("media-size", "media-source", "media-left-margin"),
+            mediaColMargins = HardwareMarginsMm(1f, 2f, 3f, 4f)
+        )
+
+        val decoded = IppDecoder().decodeResponse(captured)
+        val mediaCol = decoded.first("media-col") as IppValue.CollectionValue
+        val mediaSize = mediaCol.members.getValue("media-size").single() as IppValue.CollectionValue
+        assertEquals(IppValue.IntegerValue(10_000), mediaSize.members.getValue("x-dimension").single())
+        assertEquals(IppValue.IntegerValue(15_000), mediaSize.members.getValue("y-dimension").single())
+        assertEquals(IppValue.Keyword("tray-2"), mediaCol.members.getValue("media-source").single())
+        assertEquals(IppValue.IntegerValue(100), mediaCol.members.getValue("media-left-margin").single())
+        assertFalse(mediaCol.members.containsKey("media-top-margin"))
+        assertEquals(null, decoded.first("media-source"))
+        assertEquals(IppValue.Keyword("cardstock"), decoded.first("media-type"))
+        assertEquals(null, decoded.first("media"))
     }
 
     @Test fun usbSessionUsesExactCombinedContentLengthAndPayloadBytes() = runBlocking {

@@ -22,6 +22,10 @@ Development changes below are not part of the published 1.0.0 APK.
 - Software 2-up and 4-up physical-sheet composition for IPP PWG, PWG USB, PostScript Raster, and PCL 5 Raster
 - N-up spacing, optional slot borders, efficient per-page auto-rotation, explicit portrait/landscape grids, and persisted preset values
 - Physical-sheet preview driven by the same `NUpLayoutEngine` geometry used by raster output
+- Confirmed custom-paper width/height UI for IPP Direct and IPP PWG, with millimetre/inch entry and exact micron domain persistence
+- IPP `media-col` generation with nested custom `media-size`; margins, source, and type are included only when their collection members were reported as supported
+- Custom-media validation for confirmed minimum/maximum dimensions, hardware and user margins, orientation, checked raster arithmetic, and shared raster memory limits
+- Exact custom dimensions in presets, versioned hardware-test profiles, and privacy-safe compatibility JSON records
 
 ### Changed
 
@@ -29,10 +33,11 @@ Development changes below are not part of the published 1.0.0 APK.
 - Confirmed media source, media type, and output-bin keywords may pass through as IPP job attributes
 - IPP PWG rejects unimplemented raster encodings such as `srgb_16` instead of treating them as compatible
 - Page selection, reverse order, collated/uncollated copies, and then N-up grouping now form one deterministic pre-backend pipeline
+- Printer profile and compatibility-export schemas advance to version 2 so custom-media evidence is distinguishable from standard paper while prior observations remain readable
 
 ### Validation
 
-- 112 JVM tests pass on the development branch; Android lint and debug assembly pass
+- 127 JVM tests pass on the development branch; Android lint and debug assembly pass
 - Hardware-tested printers remain 0; no physical IPP PWG compatibility is claimed
 
 ## 1.0.0 - 2026-08-31

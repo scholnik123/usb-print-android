@@ -6,11 +6,13 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 import ru.usbprint.domain.model.BackendId
 import ru.usbprint.domain.model.ColorMode
+import ru.usbprint.domain.model.CustomPaperSizeMicrons
 import ru.usbprint.domain.model.DuplexMode
 import ru.usbprint.domain.model.HardwarePrintIssue
 import ru.usbprint.domain.model.HardwareTestOutcome
 import ru.usbprint.domain.model.HardwareTestObservation
 import ru.usbprint.domain.model.IppPrinterInfo
+import ru.usbprint.domain.model.Microns
 import ru.usbprint.domain.model.PaperSize
 import ru.usbprint.domain.model.PrinterCapabilities
 import ru.usbprint.domain.model.PrinterLanguage
@@ -38,7 +40,8 @@ class VerifiedPrinterProfileCodecTest {
             backend = BackendId.IPP_PWG,
             encoderVersion = 2,
             settings = PrintSettings(
-                paperSize = PaperSize.A4,
+                paperSize = PaperSize.AUTO,
+                customPaperSize = CustomPaperSizeMicrons(Microns(101_600), Microns(152_400)),
                 resolution = PrinterResolution.DPI_600,
                 colorMode = ColorMode.GRAYSCALE,
                 duplexMode = DuplexMode.OFF
@@ -54,6 +57,8 @@ class VerifiedPrinterProfileCodecTest {
         val encoded = VerifiedPrinterProfileCodec.encode(profile)
 
         assertEquals(profile, VerifiedPrinterProfileCodec.decode(encoded))
+        assertEquals(101_600L, profile.customPaperSize?.width?.value)
+        assertEquals(profile.customPaperSize, profile.history.single().customPaperSize)
         assertFalse(encoded.contains("PRIVATE-SERIAL"))
         assertFalse(encoded.contains("PRIVATE-DEVICE-KEY"))
     }

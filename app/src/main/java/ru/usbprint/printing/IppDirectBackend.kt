@@ -47,6 +47,8 @@ class IppDirectBackend(private val onJobStatus: (ru.usbprint.ipp.IppJobStatus) -
                 settings = job.settings,
                 supportedAttributeNames = ipp.jobCreationAttributesSupported,
                 pageCount = job.document.pageCount ?: 1,
+                mediaColSupported = ipp.mediaColSupported,
+                mediaColMargins = job.printer.capabilities.reportedHardwareMargins?.value,
                 isCancelled = isCancelled
             )
         }
@@ -92,6 +94,8 @@ class IppPwgBackend(
             jobName = job.document.displayName,
             settings = job.settings,
             supportedAttributeNames = ipp.jobCreationAttributesSupported,
+            mediaColSupported = ipp.mediaColSupported,
+            mediaColMargins = job.printer.capabilities.reportedHardwareMargins?.value,
             pageCount = plan.physicalSheetCount,
             producer = PwgSpoolProducer { writeBytes ->
                 PwgRasterDocumentWriter.write(

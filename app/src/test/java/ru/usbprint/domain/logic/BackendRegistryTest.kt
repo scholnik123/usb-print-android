@@ -14,6 +14,9 @@ import ru.usbprint.domain.model.CapabilityConfidence
 import ru.usbprint.domain.model.CapabilitySource
 import ru.usbprint.domain.model.CapabilityValue
 import ru.usbprint.domain.model.ColorMode
+import ru.usbprint.domain.model.CustomPaperRangeMicrons
+import ru.usbprint.domain.model.CustomPaperSizeMicrons
+import ru.usbprint.domain.model.Microns
 import ru.usbprint.domain.model.PaperSize
 import ru.usbprint.domain.model.PrinterResolution
 import ru.usbprint.domain.model.PrintMarginsMm
@@ -43,6 +46,20 @@ class BackendRegistryTest {
         val capabilities = ippOnlyCapabilities(pwg = true)
         val layoutChanging = PrintSettings(margins = PrintMarginsMm.ZERO)
         assertEquals(BackendId.IPP_PWG, BackendRegistry.select(capabilities, pdf.copy(sizeBytes = 100), layoutChanging).selected)
+    }
+    @Test fun selectsIppDirectForConfirmedCustomMediaWithoutSoftwareComposition() {
+        val range = CustomPaperRangeMicrons(Microns(100_000), Microns(300_000), Microns(100_000), Microns(500_000))
+        val capabilities = ippOnlyCapabilities().copy(
+            reportedCustomPaperRangeMicrons = range.confirmed(),
+            ipp = ippOnlyCapabilities().ipp.copy(
+                jobCreationAttributesSupported = setOf("media-col"),
+                mediaColSupported = setOf("media-size")
+            )
+        )
+        val settings = PrintSettings(customPaperSize = CustomPaperSizeMicrons(Microns(101_600), Microns(152_400)))
+
+        assertEquals(BackendId.IPP_DIRECT, BackendRegistry.select(capabilities, pdf.copy(sizeBytes = 100), settings).selected)
+        assertEquals(range, BackendRegistry.effectiveFor(BackendId.IPP_DIRECT, capabilities).customPaperRangeMicrons?.value)
     }
     @Test fun selectsIppPwgForRenderedImageWhenExplicitlyReported() {
         val image = DocumentRef("content://test", "photo.png", "image/png", DocumentKind.IMAGE, pageCount = 1)

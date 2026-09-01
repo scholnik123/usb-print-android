@@ -61,6 +61,7 @@ object IppPrinterCapabilitiesMapper {
         val operations = response.ints("operations-supported").toSet()
         val versions = response.strings("ipp-versions-supported").toSet()
         val jobAttributes = response.strings("job-creation-attributes-supported").toSet()
+        val mediaColSupported = response.strings("media-col-supported").toSet()
         val languages = base.supportedLanguages + formats.mapNotNull(::languageFromMime)
         val makeAndModel = response.strings("printer-make-and-model").firstOrNull()
 
@@ -90,6 +91,7 @@ object IppPrinterCapabilitiesMapper {
                 pwgRasterResolutionsSupported = pwgRasterResolutions,
                 pwgRasterDocumentTypesSupported = pwgRasterDocumentTypes,
                 jobCreationAttributesSupported = jobAttributes,
+                mediaColSupported = mediaColSupported,
                 printerState = response.int("printer-state"), printerStateReasons = response.strings("printer-state-reasons").toSet(),
                 acceptingJobs = (response.first("printer-is-accepting-jobs") as? IppValue.BooleanValue)?.value,
                 pageRangesSupported = (response.first("page-ranges-supported") as? IppValue.BooleanValue)?.value == true,

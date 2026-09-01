@@ -30,7 +30,7 @@ flowchart TB
 
 ### Domain
 
-`domain/model/` contains documents, jobs, settings, printer capabilities, capability provenance, and backend identifiers. `domain/logic/` validates settings, plans logical page order/copies, resolves presets, intersects capabilities, and chooses a backend before transmission.
+`domain/model/` contains documents, jobs, settings, exact custom-media micron values, printer capabilities, capability provenance, checked raster limits, and backend identifiers. `domain/logic/` validates settings, plans logical page order/copies, resolves presets, intersects capabilities, and chooses a backend before transmission.
 
 ### Document and rendering
 
@@ -54,7 +54,7 @@ IEEE-1284 parsing is isolated in `protocols/`. PWG Raster, PostScript, PCL 5, an
 
 ### Persistence
 
-`preferences/` stores local presets, advanced-mode state, printer-specific experimental overrides, and versioned hardware-test profiles in Jetpack DataStore. A profile retains bounded result history and a SHA-256 device identifier, never a raw serial or Android device key. Document contents and URIs are not persisted in printer preferences.
+`preferences/` stores local presets, advanced-mode state, printer-specific experimental overrides, and versioned hardware-test profiles in Jetpack DataStore. Presets and profiles preserve optional custom dimensions as exact microns. A profile retains bounded result history and a SHA-256 device identifier, never a raw serial or Android device key. Document contents and URIs are not persisted in printer preferences.
 
 ### Diagnostics
 
@@ -121,11 +121,11 @@ sequenceDiagram
     IPP-->>Android: Bounded HTTP/IPP response
     Android->>Android: Map reported capabilities and validate settings
     alt Safe direct PDF
-        Android->>IPP: HTTP/1.1 POST + IPP Print-Job + PDF
+        Android->>IPP: HTTP/1.1 POST + IPP Print-Job + PDF + optional confirmed media-col
     else Software layout through PWG
         Android->>Android: Render physical pages to bounded app-cache PWG spool
         Android->>Android: Read exact spool length
-        Android->>IPP: HTTP/1.1 POST + IPP Print-Job + image/pwg-raster
+        Android->>IPP: HTTP/1.1 POST + IPP Print-Job + image/pwg-raster + optional confirmed media-col
         Android->>Android: Delete spool on success/error/cancel
     end
     IPP-->>Android: job-id / job-uri when available
@@ -134,9 +134,11 @@ sequenceDiagram
 
 IPP-over-USB requires USB bulk IN/OUT interfaces and does not require Wi-Fi or the Android `INTERNET` permission. The development path supports direct PDF and exact-length IPP PWG Print-Job. Create-Job + Send-Document remains future work.
 
+Custom paper follows the same capability boundary as other IPP Job Template values. `IppPrinterCapabilitiesMapper` records the confirmed range and the exact `media-col-supported` member names. `BackendRegistry` exposes the UI only when `media-col/media-size` is writable for IPP Direct or IPP PWG. `PrintSettingsValidator` then checks range, orientation, user plus hardware margins, and raster limits before `IppClient` constructs the nested collection. No legacy backend receives an inferred custom-paper capability.
+
 ## Memory model
 
-Target raster data is streamed row by row. `RasterPageSource` keeps a bounded source bitmap and one output row rather than a full multi-page target job. `NUpRasterPageSource` opens slot bitmaps lazily and releases each source after its clipped vertical region, so a complete multi-page target job is never resident. Checked `Long` arithmetic and explicit dimension/pixel limits reject unsafe layouts before allocation.
+Target raster data is streamed row by row. `RasterPageSource` keeps a bounded source bitmap and one output row rather than a full multi-page target job. `NUpRasterPageSource` opens slot bitmaps lazily and releases each source after its clipped vertical region, so a complete multi-page target job is never resident. Checked `Long` micron-to-pixel arithmetic and shared dimension/pixel limits reject unsafe standard or custom layouts before allocation.
 
 IPP PWG additionally uses disk-backed spooling because HTTP requires Content-Length before transmission. The spool is unique, app-private, limited to 512 MiB, never loaded as one byte array, and removed deterministically after the request. Startup cleanup covers process death between creation and normal close.
 

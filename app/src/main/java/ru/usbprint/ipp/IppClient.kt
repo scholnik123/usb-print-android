@@ -4,6 +4,7 @@ import ru.usbprint.domain.logic.PageRangeParser
 import ru.usbprint.domain.model.AppError
 import ru.usbprint.domain.model.ColorMode
 import ru.usbprint.domain.model.DuplexMode
+import ru.usbprint.domain.model.HardwareMarginsMm
 import ru.usbprint.domain.model.Orientation
 import ru.usbprint.domain.model.PageSelection
 import ru.usbprint.domain.model.PaperSize
@@ -12,6 +13,7 @@ import ru.usbprint.domain.model.PrintQuality
 import ru.usbprint.domain.model.PrintSettings
 import java.io.InputStream
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.math.roundToInt
 
 class IppClient(
     private val session: IppSession,
@@ -31,6 +33,8 @@ class IppClient(
         settings: PrintSettings,
         supportedAttributeNames: Set<String>,
         pageCount: Int,
+        mediaColSupported: Set<String> = emptySet(),
+        mediaColMargins: HardwareMarginsMm? = null,
         isCancelled: () -> Boolean = { false }
     ): Pair<IppResponse, IppJobReference> {
         val operation = mutableListOf(
@@ -42,7 +46,7 @@ class IppClient(
             IppAttribute("document-format", IppValue.MimeMediaType(documentFormat)),
             IppAttribute("ipp-attribute-fidelity", IppValue.BooleanValue(true))
         )
-        val job = buildJobAttributes(settings, supportedAttributeNames, pageCount)
+        val job = buildJobAttributes(settings, supportedAttributeNames, pageCount, mediaColSupported, mediaColMargins)
         val groups = buildList {
             add(IppAttributeGroup(IppGroupTag.OPERATION_ATTRIBUTES, operation))
             if (job.isNotEmpty()) add(IppAttributeGroup(IppGroupTag.JOB_ATTRIBUTES, job))
@@ -106,10 +110,42 @@ class IppClient(
         else -> throw PrintException(AppError.IPP_MALFORMED_RESPONSE)
     }
 
-    private fun buildJobAttributes(settings: PrintSettings, supported: Set<String>, pageCount: Int): List<IppAttribute> = buildList {
+    private fun buildJobAttributes(
+        settings: PrintSettings,
+        supported: Set<String>,
+        pageCount: Int,
+        mediaColSupported: Set<String>,
+        mediaColMargins: HardwareMarginsMm?
+    ): List<IppAttribute> = buildList {
         fun addIfSupported(name: String, value: IppValue) { if (name in supported) add(IppAttribute(name, value)) }
         addIfSupported("copies", IppValue.IntegerValue(settings.copies))
-        if (settings.paperSize != PaperSize.AUTO) paperKeyword(settings.paperSize)?.let { addIfSupported("media", IppValue.Keyword(it)) }
+        var sourceInMediaCol = false
+        var typeInMediaCol = false
+        settings.customPaperSize?.takeIf { "media-col" in supported && "media-size" in mediaColSupported }?.let { custom ->
+            val members = linkedMapOf<String, List<IppValue>>()
+            members["media-size"] = listOf(IppValue.CollectionValue(linkedMapOf(
+                "x-dimension" to listOf(IppValue.IntegerValue(custom.width.toHundredthsMm())),
+                "y-dimension" to listOf(IppValue.IntegerValue(custom.height.toHundredthsMm()))
+            )))
+            mediaColMargins?.let { margins ->
+                mapOf(
+                    "media-left-margin" to margins.left,
+                    "media-top-margin" to margins.top,
+                    "media-right-margin" to margins.right,
+                    "media-bottom-margin" to margins.bottom
+                ).forEach { (name, millimetres) ->
+                    if (name in mediaColSupported) members[name] = listOf(IppValue.IntegerValue((millimetres * 100).roundToInt()))
+                }
+            }
+            (settings.mediaSourceKeyword ?: settings.mediaSource?.let(::mediaSourceKeyword))?.takeIf { "media-source" in mediaColSupported }?.let {
+                members["media-source"] = listOf(IppValue.Keyword(it)); sourceInMediaCol = true
+            }
+            (settings.mediaTypeKeyword ?: settings.mediaType?.let(::mediaTypeKeyword))?.takeIf { "media-type" in mediaColSupported }?.let {
+                members["media-type"] = listOf(IppValue.Keyword(it)); typeInMediaCol = true
+            }
+            add(IppAttribute("media-col", IppValue.CollectionValue(members)))
+        }
+        if (settings.customPaperSize == null && settings.paperSize != PaperSize.AUTO) paperKeyword(settings.paperSize)?.let { addIfSupported("media", IppValue.Keyword(it)) }
         val sides = when (settings.duplexMode) { DuplexMode.OFF -> "one-sided"; DuplexMode.LONG_EDGE -> "two-sided-long-edge"; DuplexMode.SHORT_EDGE -> "two-sided-short-edge" }
         addIfSupported("sides", IppValue.Keyword(sides))
         when (settings.colorMode) {
@@ -135,8 +171,8 @@ class IppClient(
             val ranges = pagesToRanges(pages).map { IppValue.IntegerRange(it.first, it.last) }
             if (ranges.isNotEmpty()) add(IppAttribute("page-ranges", ranges))
         }
-        (settings.mediaSourceKeyword ?: settings.mediaSource?.let(::mediaSourceKeyword))?.let { addIfSupported("media-source", IppValue.Keyword(it)) }
-        (settings.mediaTypeKeyword ?: settings.mediaType?.let(::mediaTypeKeyword))?.let { addIfSupported("media-type", IppValue.Keyword(it)) }
+        if (!sourceInMediaCol) (settings.mediaSourceKeyword ?: settings.mediaSource?.let(::mediaSourceKeyword))?.let { addIfSupported("media-source", IppValue.Keyword(it)) }
+        if (!typeInMediaCol) (settings.mediaTypeKeyword ?: settings.mediaType?.let(::mediaTypeKeyword))?.let { addIfSupported("media-type", IppValue.Keyword(it)) }
         (settings.outputBinKeyword ?: settings.outputBin?.let(::outputBinKeyword))?.let { addIfSupported("output-bin", IppValue.Keyword(it)) }
     }
 

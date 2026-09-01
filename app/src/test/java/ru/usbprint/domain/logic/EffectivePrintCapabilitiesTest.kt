@@ -9,6 +9,9 @@ import ru.usbprint.domain.model.CapabilityConfidence
 import ru.usbprint.domain.model.CapabilitySource
 import ru.usbprint.domain.model.CapabilityValue
 import ru.usbprint.domain.model.ColorMode
+import ru.usbprint.domain.model.CustomPaperRangeMicrons
+import ru.usbprint.domain.model.IppPrinterInfo
+import ru.usbprint.domain.model.Microns
 import ru.usbprint.domain.model.PaperSize
 import ru.usbprint.domain.model.PrinterCapabilities
 import ru.usbprint.domain.model.PrinterLanguage
@@ -42,5 +45,20 @@ class EffectivePrintCapabilitiesTest {
         val caps = BackendRegistry.effectiveFor(BackendId.PWG_RASTER, printer(PrinterLanguage.PWG_RASTER))
         val result = PrintSettingsValidator.validate(PrintSettings(paperSize = PaperSize.A3), caps, 1)
         assertTrue(result is SettingsValidation.Invalid)
+    }
+
+    @Test fun exposesCustomPaperOnlyWithConfirmedRangeAndWritableMediaColSize() {
+        val range = CustomPaperRangeMicrons(Microns(100_000), Microns(300_000), Microns(150_000), Microns(500_000))
+        val confirmed = CapabilityValue(range, CapabilitySource.IPP, CapabilityConfidence.CONFIRMED)
+        val supported = printer().copy(
+            reportedCustomPaperRangeMicrons = confirmed,
+            ipp = IppPrinterInfo(jobCreationAttributesSupported = setOf("media-col"), mediaColSupported = setOf("media-size"))
+        )
+        val missingMember = supported.copy(ipp = supported.ipp.copy(mediaColSupported = emptySet()))
+
+        assertEquals(range, BackendRegistry.effectiveFor(BackendId.IPP_DIRECT, supported).customPaperRangeMicrons?.value)
+        assertEquals(null, BackendRegistry.effectiveFor(BackendId.IPP_DIRECT, missingMember).customPaperRangeMicrons)
+        assertTrue(BackendRegistry.descriptorFor(BackendId.IPP_PWG).supportsCustomPaper)
+        assertFalse(BackendRegistry.descriptorFor(BackendId.PWG_RASTER).supportsCustomPaper)
     }
 }

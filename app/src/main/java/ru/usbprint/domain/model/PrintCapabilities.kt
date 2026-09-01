@@ -1,5 +1,8 @@
 package ru.usbprint.domain.model
 
+import java.math.BigDecimal
+import java.math.RoundingMode
+
 /**
  * Describes where a capability came from.  The value is deliberately kept
  * together with its provenance: a backend default is usable, but is not a
@@ -40,7 +43,21 @@ data class PrinterResolution(val horizontalDpi: Int, val verticalDpi: Int = hori
 @JvmInline value class Microns(val value: Long) {
     init { require(value >= 0L) }
     fun toMillimetres(): Float = value / 1_000f
-    companion object { fun fromHundredthsMm(value: Int) = Microns(Math.multiplyExact(value.toLong(), 10L)) }
+    fun toHundredthsMm(): Int = Math.floorDiv(Math.addExact(value, 5L), 10L).also { require(it <= Int.MAX_VALUE) }.toInt()
+    companion object {
+        fun fromHundredthsMm(value: Int) = Microns(Math.multiplyExact(value.toLong(), 10L))
+        fun fromMillimetres(value: String) = fromDecimal(value, BigDecimal("1000"))
+        fun fromInches(value: String) = fromDecimal(value, BigDecimal("25400"))
+        private fun fromDecimal(value: String, multiplier: BigDecimal): Microns {
+            val decimal = value.trim().toBigDecimal()
+            require(decimal.signum() > 0)
+            return Microns(decimal.multiply(multiplier).setScale(0, RoundingMode.HALF_UP).longValueExact())
+        }
+    }
+}
+
+data class CustomPaperSizeMicrons(val width: Microns, val height: Microns) {
+    init { require(width.value > 0L && height.value > 0L) }
 }
 
 data class CustomPaperRangeMicrons(
@@ -50,6 +67,27 @@ data class CustomPaperRangeMicrons(
     val maxHeight: Microns
 ) {
     init { require(minWidth.value <= maxWidth.value && minHeight.value <= maxHeight.value) }
+}
+
+/** Shared checked limits used by domain validation and the streaming raster implementation. */
+object RasterDimensionLimits {
+    const val MAX_PAGE_DIMENSION_PX = 12_000
+    const val MAX_PAGE_PIXELS = 40_000_000L
+
+    fun pixels(microns: Microns, dpi: Int): Int {
+        require(dpi in 72..1200)
+        val numerator = Math.addExact(Math.multiplyExact(microns.value, dpi.toLong()), MICRONS_PER_INCH / 2)
+        val pixels = numerator / MICRONS_PER_INCH
+        require(pixels in 1..MAX_PAGE_DIMENSION_PX.toLong()) { "Raster dimension is outside the safe range" }
+        return pixels.toInt()
+    }
+
+    fun requireSafePage(width: Int, height: Int) {
+        require(width in 1..MAX_PAGE_DIMENSION_PX && height in 1..MAX_PAGE_DIMENSION_PX) { "Raster dimension is outside the safe range" }
+        require(width.toLong() * height <= MAX_PAGE_PIXELS) { "Raster page exceeds the safe memory budget" }
+    }
+
+    private const val MICRONS_PER_INCH = 25_400L
 }
 
 /** Raw IPP keyword is retained because it is the value sent back in a Job request. */
@@ -63,6 +101,7 @@ data class IppPrinterInfo(
     val pwgRasterResolutionsSupported: Set<PrinterResolution> = emptySet(),
     val pwgRasterDocumentTypesSupported: Set<String> = emptySet(),
     val jobCreationAttributesSupported: Set<String> = emptySet(),
+    val mediaColSupported: Set<String> = emptySet(),
     val printerState: Int? = null,
     val printerStateReasons: Set<String> = emptySet(),
     val acceptingJobs: Boolean? = null,

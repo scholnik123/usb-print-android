@@ -58,6 +58,8 @@ data class PrintSettings(
     val copies: Int = 1,
     val pageSelection: PageSelection = PageSelection.All,
     val paperSize: PaperSize = PaperSize.AUTO,
+    /** Exact user-entered custom media dimensions; non-null supersedes paperSize. */
+    val customPaperSize: CustomPaperSizeMicrons? = null,
     val orientation: Orientation = Orientation.AUTO,
     val colorMode: ColorMode = ColorMode.AUTO,
     val duplexMode: DuplexMode = DuplexMode.OFF,

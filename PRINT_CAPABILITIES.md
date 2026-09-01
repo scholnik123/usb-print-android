@@ -74,6 +74,7 @@ VID/PID не используется как доказательство IPP. �
 - `media-source`, `media-type`, `output-bin` → `PrinterKeywordOption(rawKeyword, localizedDisplayName)`;
 - document formats → доступные языки local backend;
 - operations/job-creation attributes → разрешённые IPP операции и Job Template attributes.
+- `media-col-supported` → точные collection members, которые разрешено вернуть в `Print-Job`; наличие диапазона само по себе не делает custom media выбираемым.
 
 Raw keyword не теряется: UI показывает русское имя, а `Print-Job` отправляет исходное значение принтера. Неизвестный keyword безопасно отображается как есть.
 
@@ -85,6 +86,7 @@ IPP Direct доступен только для PDF с известным Conten
 
 - copies;
 - media;
+- media-col с custom `media-size`, если отдельно подтверждены top-level attribute и member;
 - sides;
 - print-color-mode;
 - printer-resolution (включая asymmetric X/Y);
@@ -112,7 +114,20 @@ IPP PWG доступен в development branch только при одновр�
 - пересечение reported resolution с encoder subset содержит symmetric 300 или 600 DPI;
 - reported PWG raster type либо общий confirmed color mode допускает реально выдаваемый `black_1`, `sgray_8` или `srgb_8` path.
 
-Page range, odd/even, reverse order, copies, collate, paper, orientation, margins, fit/fill/actual/custom scale, positioning, color mode и resolution применяются software-side до/при создании PWG payload. Поэтому `copies`, `page-ranges`, `media`, `orientation-requested`, `print-color-mode`, `printer-resolution`, `sides` и `multiple-document-handling` не отправляются повторно в IPP и не могут примениться дважды.
+Page range, odd/even, reverse order, copies, collate, paper, orientation, margins, fit/fill/actual/custom scale, positioning, color mode и resolution применяются software-side до/при создании PWG payload. Поэтому `copies`, `page-ranges`, standard `media`, `orientation-requested`, `print-color-mode`, `printer-resolution`, `sides` и `multiple-document-handling` не отправляются повторно в IPP и не могут примениться дважды. Для custom paper точный размер дополнительно передаётся как `media-col`, потому что он описывает реально загруженный носитель, а не повторяет software copies/layout.
+
+## Confirmed custom paper
+
+Custom width/height доступен только для IPP Direct и IPP PWG, когда одновременно выполнены все условия:
+
+- IPP вернул range-of-integer для `media-size/x-dimension` и `y-dimension` в `media-col-database`, `media-col-ready` или `media-col-default`;
+- `job-creation-attributes-supported` содержит `media-col`;
+- `media-col-supported` содержит `media-size`;
+- выбранный backend объявляет `supportsCustomPaper = true`.
+
+UI принимает миллиметры или дюймы, но сразу переводит значение в положительный `Long` microns с decimal arithmetic и округлением до ближайшего micron. Validator не допускает одновременный standard paper, неизвестный range, выход за min/max, размер не больше суммы user/hardware margins или небезопасные raster dimensions. Для `AUTO` orientation поля должны помещаться в обе возможные ориентации; IPP PWG проверяется с фактическим symmetric 300/600 DPI и общим `RasterDimensionLimits/RasterMemoryPolicy` budget.
+
+`Print-Job` получает nested `media-size` с `x-dimension/y-dimension` в целых hundredths of millimetre. `media-left/top/right/bottom-margin`, `media-source` и `media-type` добавляются в collection только если каждый member присутствует в `media-col-supported`; иначе подтверждённые top-level source/type сохраняют прежний pass-through. Неизвестные members и придуманный standard media keyword не отправляются. В PWG header остаются точные numeric PageSize/raster dimensions, а `cupsPageSizeName` для custom media пуст.
 
 ## Software N-up
 
@@ -138,7 +153,7 @@ IEEE-1284 `CMD` продолжает выбирать только реализ�
 
 ## UI и DataStore
 
-Динамические IPP меню source/type/bin появляются у IPP Direct и IPP PWG только при полученных options. Exact raw keyword, asymmetric resolution и N-up spacing/border/auto-rotate сохраняются в DataStore codec; отсутствующие N-up поля старых локальных presets получают безопасные defaults и не вызывают migration crash.
+Динамические IPP меню source/type/bin появляются у IPP Direct и IPP PWG только при полученных options. Exact raw keyword, asymmetric resolution, N-up spacing/border/auto-rotate и optional custom width/height microns сохраняются в DataStore codec; отсутствующие поля старых локальных presets получают безопасные defaults и не вызывают migration crash.
 
 Hidden stale IPP keyword очищается при сохранении настроек backend, который не предоставляет соответствующий option. Validator повторно проверяет raw keyword, paper, resolution, color, duplex, copies и pages перед созданием job.
 
@@ -147,7 +162,6 @@ Hidden stale IPP keyword очищается при сохранении наст
 - `Create-Job` + `Send-Document` path;
 - IPP PWG external CUPS/ipptool validation и physical printer verification;
 - полноценный долговременный job monitor после закрытия foreground service;
-- UI ввода custom width/height, несмотря на готовое confirmed range mapping;
 - PCLm;
 - automatic promotion of stored hardware evidence into selectable printer capabilities;
 - per-value provenance внутри одного mixed set (например, `AUTO` и confirmed orientations).

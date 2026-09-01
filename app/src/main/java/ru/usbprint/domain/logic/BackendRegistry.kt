@@ -102,6 +102,7 @@ object BackendRegistry {
             setOf(ColorMode.COLOR, ColorMode.GRAYSCALE, ColorMode.BLACK_ONLY, ColorMode.MONOCHROME),
             setOf(PrinterResolution.DPI_300, PrinterResolution.DPI_600)
         ).copy(
+            supportsCustomPaper = true,
             supportedMediaTypes = ru.usbprint.domain.model.MediaType.entries.toSet(),
             supportedMediaSources = ru.usbprint.domain.model.MediaSource.entries.toSet(),
             supportedOutputBins = ru.usbprint.domain.model.OutputBin.entries.toSet()
@@ -192,7 +193,9 @@ object BackendRegistry {
                 if (isIppDirect && printer.ipp.pageRangesSupported) CapabilityConfidence.CONFIRMED else CapabilityConfidence.DEFAULT
             ),
             paperSizes = paper,
-            customPaperRange = printer.reportedCustomPaperRange?.takeIf { backend.supportsCustomPaper },
+            customPaperRange = printer.reportedCustomPaperRange?.takeIf {
+                backend.supportsCustomPaper && "media-col" in printer.ipp.jobCreationAttributesSupported && "media-size" in printer.ipp.mediaColSupported
+            },
             orientations = if (isIppDirect) printer.reportedOrientations ?: CapabilityValue(setOf(Orientation.AUTO), CapabilitySource.BACKEND_DEFAULT, CapabilityConfidence.DEFAULT)
                 else CapabilityValue(backend.orientations, CapabilitySource.BACKEND_DEFAULT, CapabilityConfidence.DEFAULT),
             colorModes = colors,
@@ -211,7 +214,9 @@ object BackendRegistry {
             mediaTypeOptions = printer.reportedMediaTypeOptions.takeIf { isIpp },
             mediaSourceOptions = printer.reportedMediaSourceOptions.takeIf { isIpp },
             outputBinOptions = printer.reportedOutputBinOptions.takeIf { isIpp },
-            customPaperRangeMicrons = printer.reportedCustomPaperRangeMicrons.takeIf { isIpp && backend.supportsCustomPaper },
+            customPaperRangeMicrons = printer.reportedCustomPaperRangeMicrons.takeIf {
+                isIpp && backend.supportsCustomPaper && "media-col" in printer.ipp.jobCreationAttributesSupported && "media-size" in printer.ipp.mediaColSupported
+            },
             limitations = buildList {
                 if (!isIpp && printer.knownPaperSizes == null) add("Формат бумаги A4 — безопасное значение backend; принтер его не подтвердил.")
                 if (!isIpp && printer.knownResolutions == null) add("300 DPI — безопасное значение backend; принтер не сообщил своё разрешение.")
@@ -219,6 +224,9 @@ object BackendRegistry {
                 if (isIppDirect && printer.reportedResolutions == null) add("IPP не сообщил printer-resolution-supported; выбор DPI скрыт.")
                 if (isIppPwg && resolutions == null) add("IPP не сообщил совместимое PWG Raster resolution; выбор DPI скрыт.")
                 if (isIppPwg && colors == null) add("IPP не сообщил совместимый PWG Raster document type; выбор цвета скрыт.")
+                if (isIpp && printer.reportedCustomPaperRangeMicrons != null && (
+                        "media-col" !in printer.ipp.jobCreationAttributesSupported || "media-size" !in printer.ipp.mediaColSupported
+                    )) add("IPP сообщил custom media range, но не разрешил media-col/media-size для задания; ввод размера скрыт.")
                 if (printer.reportedHardwareMargins == null && override?.forcedMargins == null) add("Физические непечатаемые поля принтера неизвестны.")
                 if (id == BackendId.PCL5_RASTER) add("PCL 5 Raster выводит монохромный поток.")
             }
@@ -264,7 +272,7 @@ object BackendRegistry {
     }
 
     private fun isPdfDirectSafe(settings: PrintSettings): Boolean =
-        settings.copies == 1 && settings.pageSelection is PageSelection.All && settings.paperSize == PaperSize.AUTO &&
+        settings.copies == 1 && settings.pageSelection is PageSelection.All && settings.paperSize == PaperSize.AUTO && settings.customPaperSize == null &&
             settings.orientation == Orientation.AUTO && settings.colorMode == ColorMode.AUTO && settings.duplexMode == DuplexMode.OFF &&
             settings.selectedResolution == null && settings.scalingMode == ru.usbprint.domain.model.ScalingMode.FIT &&
             settings.marginsMm == 5f && settings.quality == ru.usbprint.domain.model.PrintQuality.NORMAL && settings.pagesPerSheet == 1

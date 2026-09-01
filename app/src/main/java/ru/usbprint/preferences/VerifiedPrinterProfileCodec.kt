@@ -4,11 +4,13 @@ import java.net.URLDecoder
 import java.net.URLEncoder
 import ru.usbprint.domain.model.BackendId
 import ru.usbprint.domain.model.ColorMode
+import ru.usbprint.domain.model.CustomPaperSizeMicrons
 import ru.usbprint.domain.model.DuplexMode
 import ru.usbprint.domain.model.HardwarePrintIssue
 import ru.usbprint.domain.model.HardwareTestOutcome
 import ru.usbprint.domain.model.HardwareTestRecord
 import ru.usbprint.domain.model.PaperSize
+import ru.usbprint.domain.model.Microns
 import ru.usbprint.domain.model.PrinterLanguage
 import ru.usbprint.domain.model.PrinterResolution
 import ru.usbprint.domain.model.VerifiedPrinterProfile
@@ -29,6 +31,8 @@ object VerifiedPrinterProfileCodec {
         put("ippFormats", profile.ippFormats.map(String::lowercase).sorted().joinToString(","))
         put("backend", profile.backend.name)
         put("paper", profile.paper.name)
+        put("customWidthMicrons", profile.customPaperSize?.width?.value?.toString().orEmpty())
+        put("customHeightMicrons", profile.customPaperSize?.height?.value?.toString().orEmpty())
         put("xdpi", profile.resolution?.horizontalDpi?.toString().orEmpty())
         put("ydpi", profile.resolution?.verticalDpi?.toString().orEmpty())
         put("color", profile.color.name)
@@ -61,6 +65,7 @@ object VerifiedPrinterProfileCodec {
             ippFormats = csv(map.getValue("ippFormats")).mapTo(linkedSetOf(), String::lowercase),
             backend = BackendId.valueOf(map.getValue("backend")),
             paper = PaperSize.valueOf(map.getValue("paper")),
+            customPaperSize = customPaper(map),
             resolution = resolution(map),
             color = ColorMode.valueOf(map.getValue("color")),
             duplex = DuplexMode.valueOf(map.getValue("duplex")),
@@ -77,6 +82,8 @@ object VerifiedPrinterProfileCodec {
         "backend" to record.backend.name,
         "encoder" to record.encoderVersion.toString(),
         "paper" to record.paper.name,
+        "customWidthMicrons" to record.customPaperSize?.width?.value?.toString().orEmpty(),
+        "customHeightMicrons" to record.customPaperSize?.height?.value?.toString().orEmpty(),
         "xdpi" to record.resolution?.horizontalDpi?.toString().orEmpty(),
         "ydpi" to record.resolution?.verticalDpi?.toString().orEmpty(),
         "color" to record.color.name,
@@ -94,6 +101,7 @@ object VerifiedPrinterProfileCodec {
             backend = BackendId.valueOf(map.getValue("backend")),
             encoderVersion = map.getValue("encoder").toInt(),
             paper = PaperSize.valueOf(map.getValue("paper")),
+            customPaperSize = customPaper(map),
             resolution = resolution(map),
             color = ColorMode.valueOf(map.getValue("color")),
             duplex = DuplexMode.valueOf(map.getValue("duplex")),
@@ -106,6 +114,11 @@ object VerifiedPrinterProfileCodec {
 
     private fun resolution(map: Map<String, String>): PrinterResolution? =
         map.getValue("xdpi").toIntOrNull()?.let { x -> map.getValue("ydpi").toIntOrNull()?.let { y -> PrinterResolution(x, y) } }
+
+    private fun customPaper(map: Map<String, String>): CustomPaperSizeMicrons? =
+        map["customWidthMicrons"]?.toLongOrNull()?.let { width ->
+            map["customHeightMicrons"]?.toLongOrNull()?.let { height -> CustomPaperSizeMicrons(Microns(width), Microns(height)) }
+        }
 
     private fun csv(value: String): List<String> = value.split(',').filter(String::isNotBlank)
     private fun encodeMap(map: Map<String, String>): String = map.entries.sortedBy { it.key }.joinToString("&") { "${escape(it.key)}=${escape(it.value)}" }

@@ -11,6 +11,8 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import ru.usbprint.domain.model.AppError
+import ru.usbprint.domain.model.CustomPaperSizeMicrons
+import ru.usbprint.domain.model.Microns
 import ru.usbprint.domain.model.PageSelection
 import ru.usbprint.domain.model.PrintException
 import ru.usbprint.domain.model.PrintSettings
@@ -76,6 +78,24 @@ class IppPwgJobPipelineTest {
         assertEquals(AppError.PRINT_CANCELLED, error.error)
         assertFalse(producerCalled)
         assertEquals(0, session.exchangeCalls)
+        assertNoSpools(cache)
+    } }
+
+    @Test fun customMediaColSurvivesPwgPassthroughFilter() = withTempDirectory { cache -> runBlocking {
+        val session = CapturingSession()
+        IppPwgJobPipeline(IppPwgSpoolManager(cache, maxBytes = 1024)).submit(
+            client = IppClient(session),
+            jobName = "custom.pdf",
+            settings = PrintSettings(customPaperSize = CustomPaperSizeMicrons(Microns(100_000), Microns(150_000))),
+            supportedAttributeNames = setOf("media-col", "copies"),
+            pageCount = 1,
+            producer = PwgSpoolProducer { it(byteArrayOf(1)) },
+            mediaColSupported = setOf("media-size")
+        )
+
+        val request = IppDecoder().decodeResponse(session.ippBytes)
+        assertTrue(request.first("media-col") is IppValue.CollectionValue)
+        assertEquals(null, request.first("copies"))
         assertNoSpools(cache)
     } }
 

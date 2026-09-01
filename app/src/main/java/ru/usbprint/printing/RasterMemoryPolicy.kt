@@ -1,17 +1,18 @@
 package ru.usbprint.printing
 
+import ru.usbprint.domain.model.RasterDimensionLimits
+
 /** Single conservative policy used before raster allocations or page rendering. */
 object RasterMemoryPolicy {
-    const val MAX_PAGE_DIMENSION_PX = 12_000
+    const val MAX_PAGE_DIMENSION_PX = RasterDimensionLimits.MAX_PAGE_DIMENSION_PX
     /** Allows streamed A4 at 600 DPI (about 34.8 MP) while still rejecting larger unsafe combinations. */
-    const val MAX_PAGE_PIXELS = 40_000_000L
+    const val MAX_PAGE_PIXELS = RasterDimensionLimits.MAX_PAGE_PIXELS
     const val MAX_SOURCE_PIXELS = 14_000_000L
     const val MAX_SOURCE_METADATA_PIXELS = 500_000_000L
     const val MAX_RENDER_WIDTH = 2_048
 
     fun requireSafePage(width: Int, height: Int) {
-        require(width in 1..MAX_PAGE_DIMENSION_PX && height in 1..MAX_PAGE_DIMENSION_PX) { "Raster dimension is outside the safe range" }
-        require(width.toLong() * height <= MAX_PAGE_PIXELS) { "Raster page exceeds the safe memory budget" }
+        RasterDimensionLimits.requireSafePage(width, height)
     }
 
     fun requireSafeSourceMetadata(width: Int, height: Int) {

@@ -9,7 +9,7 @@ data class CompatibilityExportEnvironment(val androidRelease: String, val androi
 
 /** Public attachment format. Deliberately omits identity hash, notes, document data, URI, filename, and payload. */
 object CompatibilityRecordJson {
-    const val SCHEMA_VERSION = 1
+    const val SCHEMA_VERSION = 2
 
     fun encode(profile: VerifiedPrinterProfile, environment: CompatibilityExportEnvironment): String = buildString {
         appendLine("{")
@@ -33,6 +33,7 @@ object CompatibilityRecordJson {
         appendLine("  \"encoderVersion\": ${profile.encoderVersions.getValue(profile.backend)},")
         appendLine("  \"settings\": {")
         appendLine("    \"paper\": ${profile.paper.name.json()},")
+        appendLine("    \"customPaperMicrons\": ${profile.customPaperSize?.let { "{\"width\": ${it.width.value}, \"height\": ${it.height.value}}" } ?: "null"},")
         appendLine("    \"resolution\": ${profile.resolution?.displayName.jsonOrNull()},")
         appendLine("    \"color\": ${profile.color.name.json()},")
         appendLine("    \"duplex\": ${profile.duplex.name.json()}")

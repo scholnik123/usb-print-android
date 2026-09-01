@@ -67,6 +67,7 @@ import ru.usbprint.domain.logic.PrintPresetResolver
 import ru.usbprint.domain.model.BackendId
 import ru.usbprint.domain.model.ColorMode
 import ru.usbprint.domain.model.ContentPosition
+import ru.usbprint.domain.model.CustomPaperSizeMicrons
 import ru.usbprint.domain.model.DuplexMode
 import ru.usbprint.domain.model.Orientation
 import ru.usbprint.domain.model.PageSelection
@@ -80,6 +81,7 @@ import ru.usbprint.domain.model.EffectivePrintCapabilities
 import ru.usbprint.domain.model.ExperimentalPrinterOverride
 import ru.usbprint.domain.model.HardwarePrintIssue
 import ru.usbprint.domain.model.HardwareTestOutcome
+import ru.usbprint.domain.model.Microns
 import ru.usbprint.domain.model.PrinterResolution
 import ru.usbprint.domain.model.PrinterKeywordOption
 import ru.usbprint.domain.model.ScalingMode
@@ -87,6 +89,8 @@ import ru.usbprint.presentation.MainUiState
 import ru.usbprint.presentation.MainViewModel
 import ru.usbprint.presentation.theme.UsbPrintTheme
 import ru.usbprint.usb.UsbPrinterState
+import java.math.BigDecimal
+import java.math.RoundingMode
 
 class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels { MainViewModel.factory((application as UsbPrintApplication).container) }
@@ -334,6 +338,10 @@ private fun HardwareTestResultDialog(
     var pageMode by remember(initial) { mutableStateOf(initial.pageSelection) }
     var rangeText by remember(initial) { mutableStateOf((initial.pageSelection as? PageSelection.Ranges)?.raw.orEmpty()) }
     var paper by remember(initial) { mutableStateOf(initial.paperSize) }
+    var customPaperEnabled by remember(initial) { mutableStateOf(initial.customPaperSize != null) }
+    var paperUnit by remember(initial) { mutableStateOf(PaperUnit.MILLIMETRES) }
+    var customWidth by remember(initial) { mutableStateOf(initial.customPaperSize?.width?.let { formatPaperDimension(it, PaperUnit.MILLIMETRES) }.orEmpty()) }
+    var customHeight by remember(initial) { mutableStateOf(initial.customPaperSize?.height?.let { formatPaperDimension(it, PaperUnit.MILLIMETRES) }.orEmpty()) }
     var orientation by remember(initial) { mutableStateOf(initial.orientation) }
     var color by remember(initial) { mutableStateOf(initial.colorMode) }
     var duplex by remember(initial) { mutableStateOf(initial.duplexMode) }
@@ -389,7 +397,45 @@ private fun HardwareTestResultDialog(
                 }
                 if (pageMode is PageSelection.Ranges) OutlinedTextField(rangeText, { rangeText = it }, label = { Text("Например: 1-4, 7") }, supportingText = { Text("Всего страниц: ${pageCount ?: 1}") }, modifier = Modifier.fillMaxWidth())
             }
-            capabilities.paperSizes?.let { EnumChips("Бумага · ${it.disclosure}", setOf(PaperSize.AUTO) + it.value, paper, { paper = it }) { value -> value.label } }
+            val customRange = capabilities.customPaperRangeMicrons
+            if (capabilities.paperSizes != null || customRange != null) {
+                Text("Бумага", style = MaterialTheme.typography.labelLarge)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    capabilities.paperSizes?.let { values ->
+                        (setOf(PaperSize.AUTO) + values.value).forEach { value ->
+                            FilterChip(!customPaperEnabled && paper == value, { customPaperEnabled = false; paper = value }, label = { Text(value.label) })
+                        }
+                    }
+                    customRange?.let { range ->
+                        FilterChip(customPaperEnabled, {
+                            customPaperEnabled = true
+                            paper = PaperSize.AUTO
+                            if (parsePaperDimension(customWidth, paperUnit) == null) customWidth = formatPaperDimension(range.value.minWidth, paperUnit)
+                            if (parsePaperDimension(customHeight, paperUnit) == null) customHeight = formatPaperDimension(range.value.minHeight, paperUnit)
+                        }, label = { Text("Свой размер") })
+                    }
+                }
+                capabilities.paperSizes?.let { Text(it.disclosure, style = MaterialTheme.typography.bodySmall) }
+                if (customPaperEnabled && customRange != null) {
+                    Text("Единицы", style = MaterialTheme.typography.labelLarge)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        PaperUnit.entries.forEach { unit -> FilterChip(paperUnit == unit, {
+                            val widthMicrons = parsePaperDimension(customWidth, paperUnit)
+                            val heightMicrons = parsePaperDimension(customHeight, paperUnit)
+                            paperUnit = unit
+                            widthMicrons?.let { customWidth = formatPaperDimension(it, unit) }
+                            heightMicrons?.let { customHeight = formatPaperDimension(it, unit) }
+                        }, label = { Text(unit.label) }) }
+                    }
+                    OutlinedTextField(customWidth, { customWidth = paperNumberInput(it) }, label = { Text("Ширина, ${paperUnit.symbol}") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(customHeight, { customHeight = paperNumberInput(it) }, label = { Text("Высота, ${paperUnit.symbol}") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    Text(
+                        "Подтверждённый диапазон: ${formatPaperDimension(customRange.value.minWidth, paperUnit)}–${formatPaperDimension(customRange.value.maxWidth, paperUnit)} × " +
+                            "${formatPaperDimension(customRange.value.minHeight, paperUnit)}–${formatPaperDimension(customRange.value.maxHeight, paperUnit)} ${paperUnit.symbol} · ${customRange.disclosure}",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
             capabilities.orientations?.let { EnumChips("Ориентация · Авто не отправляет IPP attribute", setOf(Orientation.AUTO) + it.value, orientation, { orientation = it }) { value -> value.label } }
             capabilities.colorModes?.let { EnumChips("Цвет · ${it.disclosure}", setOf(ColorMode.AUTO) + it.value, color, { color = it }) { value -> value.label } }
             capabilities.duplexModes?.takeIf { it.value.any { mode -> mode != DuplexMode.OFF } }?.let { EnumChips("Двусторонняя · ${it.disclosure}", it.value, duplex, { duplex = it }) { value -> value.label } }
@@ -451,8 +497,15 @@ private fun HardwareTestResultDialog(
         if (margins.any { it !in 0f..60f }) return@Button
         val spacing = nUpSpacing.toFloatOrNull() ?: return@Button
         if (spacing !in 0f..20f) return@Button
+        val customPaper = if (customPaperEnabled) {
+            CustomPaperSizeMicrons(
+                parsePaperDimension(customWidth, paperUnit) ?: return@Button,
+                parsePaperDimension(customHeight, paperUnit) ?: return@Button
+            )
+        } else null
         onSave(initial.copy(
-            copies = copiesText.toIntOrNull() ?: return@Button, pageSelection = selection, paperSize = paper,
+            copies = copiesText.toIntOrNull() ?: return@Button, pageSelection = selection,
+            paperSize = if (customPaper != null) PaperSize.AUTO else paper, customPaperSize = customPaper,
             orientation = orientation, colorMode = color, duplexMode = duplex, scalingMode = scaling,
             resolutionDpi = resolution?.takeIf { it.horizontalDpi == it.verticalDpi }?.horizontalDpi, resolution = resolution,
             marginsMm = margins.first(), margins = ru.usbprint.domain.model.PrintMarginsMm(margins[0], margins[1], margins[2], margins[3]),
@@ -465,6 +518,24 @@ private fun HardwareTestResultDialog(
         ))
     }, enabled = enabled) { Text("Сохранить") } }, dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Отмена") } })
 }
+
+private enum class PaperUnit(val label: String, val symbol: String) {
+    MILLIMETRES("Миллиметры", "мм"), INCHES("Дюймы", "in")
+}
+
+private fun parsePaperDimension(value: String, unit: PaperUnit): Microns? = runCatching {
+    when (unit) {
+        PaperUnit.MILLIMETRES -> Microns.fromMillimetres(value)
+        PaperUnit.INCHES -> Microns.fromInches(value)
+    }
+}.getOrNull()
+
+private fun formatPaperDimension(value: Microns, unit: PaperUnit): String {
+    val divisor = if (unit == PaperUnit.MILLIMETRES) BigDecimal("1000") else BigDecimal("25400")
+    return BigDecimal.valueOf(value.value).divide(divisor, 3, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString()
+}
+
+private fun paperNumberInput(value: String): String = value.replace(',', '.').filter { it.isDigit() || it == '.' }.take(10)
 
 @Composable private fun MarginField(label: String, value: String, onValue: (String) -> Unit) {
     OutlinedTextField(value, { onValue(it.filter { c -> c.isDigit() || c == '.' }.take(5)) }, label = { Text(label) }, singleLine = true, modifier = Modifier.fillMaxWidth(0.47f))

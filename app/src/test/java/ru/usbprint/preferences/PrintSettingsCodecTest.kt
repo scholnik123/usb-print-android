@@ -3,6 +3,8 @@ package ru.usbprint.preferences
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import ru.usbprint.domain.model.PrintSettings
+import ru.usbprint.domain.model.CustomPaperSizeMicrons
+import ru.usbprint.domain.model.Microns
 
 class PrintSettingsCodecTest {
     @Test fun roundTripsNUpCompositionOptions() {
@@ -32,5 +34,11 @@ class PrintSettingsCodecTest {
         assertEquals(3f, settings.nUpSpacingMm)
         assertEquals(false, settings.nUpDrawBorders)
         assertEquals(true, settings.nUpAutoRotate)
+    }
+
+    @Test fun roundTripsCustomPaperAsMicrons() {
+        val custom = CustomPaperSizeMicrons(Microns(101_600), Microns(152_400))
+        val decoded = checkNotNull(PrintSettingsCodec.decode(PrintSettingsCodec.encode("4x6", PrintSettings(customPaperSize = custom))))
+        assertEquals(custom, decoded.second.customPaperSize)
     }
 }

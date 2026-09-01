@@ -25,7 +25,7 @@ Download the current APK from [GitHub Releases](https://github.com/scholnik123/u
 
 The first public APK is debug-signed and intended for direct installation and testing. A production signing key is not included in this repository.
 
-> **Development branch:** `codex/development` contains IPP PWG Raster Print-Job, explicit hardware-result profiles/export, and software 2-up/4-up completed after 1.0.0. These changes are not part of the published 1.0.0 APK and have not yet been validated on a physical printer.
+> **Development branch:** `codex/development` contains IPP PWG Raster Print-Job, explicit hardware-result profiles/export, software 2-up/4-up, and confirmed IPP custom-paper sizes completed after 1.0.0. These changes are not part of the published 1.0.0 APK and have not yet been validated on a physical printer.
 
 ## Features
 
@@ -73,6 +73,7 @@ Legacy Printer Class devices use IEEE-1284 `CMD` detection plus clearly labelled
 - All pages, page ranges, odd/even pages
 - Reverse page order and collation where the backend supports them
 - Paper size and portrait/landscape orientation
+- Custom width/height in millimetres or inches when the selected IPP backend and printer both confirm a writable custom-media range
 - Color, grayscale, and black-only modes
 - Duplex when confirmed by the printer
 - Exact printer resolution, including asymmetric IPP values
@@ -81,7 +82,7 @@ Legacy Printer Class devices use IEEE-1284 `CMD` detection plus clearly labelled
 - Printer-reported media source, media type, and output bin for IPP backends
 - Built-in and local custom presets
 
-Available settings depend on the printer and selected backend. N-up is presented only when selection can move to IPP PWG, PWG USB, PostScript Raster, or PCL 5 Raster; direct, ESC/POS, and RAW paths do not advertise it.
+Available settings depend on the printer and selected backend. N-up is presented only when selection can move to IPP PWG, PWG USB, PostScript Raster, or PCL 5 Raster; direct, ESC/POS, and RAW paths do not advertise it. Custom paper is presented only for IPP Direct or IPP PWG when IPP reports a range plus writable `media-col` and `media-size`; an unknown range never enables the control.
 
 ## Printing backends
 
@@ -157,7 +158,7 @@ Requirements:
 
 When the development build sends the built-in A4 hardware-test page, it asks what the user physically observed. The choices distinguish a correct page, a page with classified defects, an accepted job with no page, a printer error, no visible action, a lost connection, and another described result. Dismissing the dialog keeps an explicit “evaluate result” action available. A transport or IPP success never chooses an answer for the user.
 
-After an explicit answer, the development build stores a local versioned profile with app/encoder versions, printer model and VID/PID, a SHA-256 device identifier instead of a raw serial, reported languages/formats, tested settings, result date, and up to 20 historical observations. An encoder-version change preserves the history but changes the status to `NEEDS_REVALIDATION`. No profile is created from USB or IPP status alone.
+After an explicit answer, the development build stores a local versioned profile with app/encoder versions, printer model and VID/PID, a SHA-256 device identifier instead of a raw serial, reported languages/formats, exact tested settings (including custom dimensions in microns), result date, and up to 20 historical observations. An encoder-version or profile-schema change preserves the history but changes the status to `NEEDS_REVALIDATION`. No profile is created from USB or IPP status alone.
 
 A saved profile can be exported as `USB-Print-compatibility.json` for review and attachment to the GitHub compatibility issue. The public record contains app and Android versions, printer model and VID/PID, backend/encoder version, reported languages/formats, tested settings, status/outcome/issues, date, and observation count. It excludes the stored identity hash, raw serial/device key, free-form notes, document name/content/URI, and print payload.
 
@@ -195,7 +196,7 @@ The APK is generated at `app/build/outputs/apk/debug/app-debug.apk`.
 
 ## Validation
 
-The first public release passes 61 JVM tests covering IPP wire format and malformed input, HTTP framing, capability mapping, USB discovery, PWG/PCL/PostScript invariants, page planning, and raster memory calculations. The development branch passes 112 JVM tests after adding exact-length IPP PWG coverage, the hardware-test workflow, versioned profiles/export, and deterministic N-up planning/settings checks.
+The first public release passes 61 JVM tests covering IPP wire format and malformed input, HTTP framing, capability mapping, USB discovery, PWG/PCL/PostScript invariants, page planning, and raster memory calculations. The development branch passes 127 JVM tests after adding exact-length IPP PWG coverage, the hardware-test workflow, versioned profiles/export, deterministic N-up checks, and confirmed custom-paper conversion/validation/wire-format coverage.
 
 Internal golden/invariant tests are not equivalent to external validation through CUPS, Ghostscript, or ipptool, and they are not a substitute for physical printer testing. See [VALIDATION_REPORT.md](VALIDATION_REPORT.md) and [docs/TESTING.md](docs/TESTING.md).
 
@@ -207,7 +208,7 @@ Internal golden/invariant tests are not equivalent to external validation throug
 - IPP PWG is implemented only on the development branch and still lacks external reference-tool and physical-printer validation; Create-Job + Send-Document is not implemented.
 - PCLm, PCL XL/PCL6, URF, and vendor-specific protocols are not implemented.
 - Software N-up is limited to 1, 2, or 4 logical pages and the four composing raster backends; connected-device preview/printing validation is still not run.
-- IPP custom-paper ranges may be detected, but custom-size UI and job encoding are incomplete.
+- Development custom paper is limited to IPP Direct and IPP PWG, requires a printer-confirmed range plus writable `media-col/media-size`, and has not been validated on a physical printer.
 - Compatibility JSON must still be reviewed and submitted by the user; the application never publishes it automatically.
 - Office formats require conversion to PDF.
 - The release APK is debug-signed, not production-signed.
@@ -223,7 +224,8 @@ See [COMPATIBILITY.md](COMPATIBILITY.md) for evidence levels and the reporting t
 - Physical printer validation and evidence-backed compatibility reports
 - Physical-printer validation of the development IPP PWG Raster path
 - Profile history/review management UI
-- Complete custom-paper workflow
+- Local job metrics, real progress reporting, and bounded diagnostic history
+- Large-document and custom-media stress hardening
 - PCLm and expanded standards-based compatibility
 
 No delivery dates are promised.

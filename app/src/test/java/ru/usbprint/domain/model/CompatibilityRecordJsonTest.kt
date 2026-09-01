@@ -44,7 +44,13 @@ class CompatibilityRecordJsonTest {
         ).forEach { forbidden -> assertFalse("Export leaked $forbidden", json.contains(forbidden, ignoreCase = true)) }
     }
 
-    private fun profile(): VerifiedPrinterProfile {
+    @Test fun exportsExactCustomPaperMicrons() {
+        val json = CompatibilityRecordJson.encode(profile(custom = true), CompatibilityExportEnvironment("15", 35))
+        assertTrue(json.contains("\"paper\": \"AUTO\""))
+        assertTrue(json.contains("\"customPaperMicrons\": {\"width\": 101600, \"height\": 152400}"))
+    }
+
+    private fun profile(custom: Boolean = false): VerifiedPrinterProfile {
         val printer = PrinterCapabilities(
             manufacturer = "Example \"Print\"",
             model = "Laser 1",
@@ -63,7 +69,8 @@ class CompatibilityRecordJsonTest {
             backend = BackendId.IPP_PWG,
             encoderVersion = 2,
             settings = PrintSettings(
-                paperSize = PaperSize.A4,
+                paperSize = if (custom) PaperSize.AUTO else PaperSize.A4,
+                customPaperSize = if (custom) CustomPaperSizeMicrons(Microns(101_600), Microns(152_400)) else null,
                 resolution = PrinterResolution.DPI_600,
                 colorMode = ColorMode.GRAYSCALE,
                 duplexMode = DuplexMode.OFF

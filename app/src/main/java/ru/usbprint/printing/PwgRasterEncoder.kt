@@ -40,7 +40,7 @@ data class PwgRasterHeader(
         // CUPS v2 extension.
         putInt(420, numberOfColors); putFloat(424, 1f); putFloat(428, layout.widthPoints.toFloat()); putFloat(432, layout.heightPoints.toFloat())
         putFloat(436, 0f); putFloat(440, 0f); putFloat(444, layout.widthPoints.toFloat()); putFloat(448, layout.heightPoints.toFloat())
-        putCString(1732, layout.paper.pwgKeyword)
+        putCString(1732, layout.mediaName ?: layout.paper.pwgKeyword)
     }.array()
 
     private fun ByteBuffer.putCString(offset: Int, value: String) {

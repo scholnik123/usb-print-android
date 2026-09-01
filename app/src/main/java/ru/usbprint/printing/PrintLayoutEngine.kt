@@ -3,8 +3,10 @@ package ru.usbprint.printing
 import ru.usbprint.domain.model.Orientation
 import ru.usbprint.domain.model.ContentPosition
 import ru.usbprint.domain.model.HardwareMarginsMm
+import ru.usbprint.domain.model.Microns
 import ru.usbprint.domain.model.PaperSize
 import ru.usbprint.domain.model.PrintSettings
+import ru.usbprint.domain.model.RasterDimensionLimits
 import ru.usbprint.domain.model.ScalingMode
 import kotlin.math.floor
 import kotlin.math.max
@@ -20,10 +22,11 @@ data class RasterPageFrame(
     val widthPoints: Int,
     val heightPoints: Int,
     val printableArea: PixelRect,
-    val orientation: Orientation
+    val orientation: Orientation,
+    val mediaName: String? = null
 ) {
     fun withContent(content: PixelRect) = RasterPageLayout(
-        paper, dpi, widthPx, heightPx, widthPoints, heightPoints, content, orientation
+        paper, dpi, widthPx, heightPx, widthPoints, heightPoints, content, orientation, mediaName
     )
 }
 data class RasterPageLayout(
@@ -34,7 +37,9 @@ data class RasterPageLayout(
     val widthPoints: Int,
     val heightPoints: Int,
     val content: PixelRect,
-    val orientation: Orientation
+    val orientation: Orientation,
+    /** Null selects the standard paper keyword; empty means exact unnamed custom media. */
+    val mediaName: String? = null
 )
 
 /** Pure physical layout calculation shared by PWG, PostScript and PCL 5 raster paths. */
@@ -70,16 +75,20 @@ object PrintLayoutEngine {
     ): RasterPageFrame {
         require(orientation != Orientation.AUTO)
         val paper = if (settings.paperSize == PaperSize.AUTO) PaperSize.A4 else settings.paperSize
+        val custom = settings.customPaperSize
         val paperWidthMm = if (orientation == Orientation.LANDSCAPE) paper.heightMm else paper.widthMm
         val paperHeightMm = if (orientation == Orientation.LANDSCAPE) paper.widthMm else paper.heightMm
-        val width = mmToPixels(paperWidthMm, dpi)
-        val height = mmToPixels(paperHeightMm, dpi)
+        val orientedCustomWidth = custom?.let { if (orientation == Orientation.LANDSCAPE) it.height else it.width }
+        val orientedCustomHeight = custom?.let { if (orientation == Orientation.LANDSCAPE) it.width else it.height }
+        val width = orientedCustomWidth?.let { RasterDimensionLimits.pixels(it, dpi) } ?: mmToPixels(paperWidthMm, dpi)
+        val height = orientedCustomHeight?.let { RasterDimensionLimits.pixels(it, dpi) } ?: mmToPixels(paperHeightMm, dpi)
         RasterMemoryPolicy.requireSafePage(width, height)
         val user = settings.margins
         val left = mmToPixelMargin(user.left + hardwareMargins.left, dpi)
         val top = mmToPixelMargin(user.top + hardwareMargins.top, dpi)
         val right = mmToPixelMargin(user.right + hardwareMargins.right, dpi)
         val bottom = mmToPixelMargin(user.bottom + hardwareMargins.bottom, dpi)
+        if (custom != null) require(width > left + right && height > top + bottom) { "Custom media is smaller than its margins" }
         val availableWidth = max(1, width - left - right)
         val availableHeight = max(1, height - top - bottom)
         return RasterPageFrame(
@@ -87,10 +96,11 @@ object PrintLayoutEngine {
             dpi = dpi,
             widthPx = width,
             heightPx = height,
-            widthPoints = (paperWidthMm / MM_PER_INCH * POINTS_PER_INCH).roundToInt(),
-            heightPoints = (paperHeightMm / MM_PER_INCH * POINTS_PER_INCH).roundToInt(),
+            widthPoints = orientedCustomWidth?.let(::micronsToPoints) ?: (paperWidthMm / MM_PER_INCH * POINTS_PER_INCH).roundToInt(),
+            heightPoints = orientedCustomHeight?.let(::micronsToPoints) ?: (paperHeightMm / MM_PER_INCH * POINTS_PER_INCH).roundToInt(),
             printableArea = PixelRect(left, top, availableWidth, availableHeight),
-            orientation = orientation
+            orientation = orientation,
+            mediaName = if (custom != null) "" else null
         )
     }
 
@@ -116,6 +126,9 @@ object PrintLayoutEngine {
     }
 
     private fun mmToPixelMargin(mm: Float, dpi: Int): Int = (mm.coerceIn(0f, 60f).toDouble() / MM_PER_INCH * dpi).roundToInt()
+
+    private fun micronsToPoints(value: Microns): Int =
+        ((Math.multiplyExact(value.value, POINTS_PER_INCH.toLong()) + 12_700L) / 25_400L).also { require(it in 1..Int.MAX_VALUE) }.toInt()
 
     private fun positionedOrigin(position: ContentPosition, left: Int, top: Int, availableWidth: Int, availableHeight: Int, contentWidth: Int, contentHeight: Int): Pair<Int, Int> {
         val x = when (position) {

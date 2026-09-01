@@ -5,6 +5,7 @@ import kotlinx.coroutines.ensureActive
 import ru.usbprint.domain.model.AppError
 import ru.usbprint.domain.model.PrintException
 import ru.usbprint.domain.model.PrintSettings
+import ru.usbprint.domain.model.HardwareMarginsMm
 import ru.usbprint.ipp.IppClient
 import ru.usbprint.ipp.IppJobReference
 import ru.usbprint.ipp.IppResponse
@@ -22,6 +23,8 @@ class IppPwgJobPipeline(private val spoolManager: IppPwgSpoolManager) {
         supportedAttributeNames: Set<String>,
         pageCount: Int,
         producer: PwgSpoolProducer,
+        mediaColSupported: Set<String> = emptySet(),
+        mediaColMargins: HardwareMarginsMm? = null,
         isCancelled: () -> Boolean = { false }
     ): Pair<IppResponse, IppJobReference> {
         ensureNotCancelled(isCancelled)
@@ -44,6 +47,8 @@ class IppPwgJobPipeline(private val spoolManager: IppPwgSpoolManager) {
                     settings = settings,
                     supportedAttributeNames = supportedAttributeNames.intersect(PASSTHROUGH_JOB_ATTRIBUTES),
                     pageCount = pageCount,
+                    mediaColSupported = mediaColSupported,
+                    mediaColMargins = mediaColMargins,
                     isCancelled = isCancelled
                 )
             }
@@ -57,6 +62,6 @@ class IppPwgJobPipeline(private val spoolManager: IppPwgSpoolManager) {
 
     companion object {
         const val PWG_MIME = "image/pwg-raster"
-        private val PASSTHROUGH_JOB_ATTRIBUTES = setOf("media-source", "media-type", "output-bin")
+        private val PASSTHROUGH_JOB_ATTRIBUTES = setOf("media-col", "media-source", "media-type", "output-bin")
     }
 }

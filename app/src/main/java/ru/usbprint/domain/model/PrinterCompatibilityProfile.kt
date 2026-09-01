@@ -2,7 +2,7 @@ package ru.usbprint.domain.model
 
 import java.security.MessageDigest
 
-const val VERIFIED_PRINTER_PROFILE_SCHEMA_VERSION = 1
+const val VERIFIED_PRINTER_PROFILE_SCHEMA_VERSION = 2
 const val MAX_PROFILE_HISTORY = 20
 
 enum class VerifiedPrinterStatus(val label: String) {
@@ -59,6 +59,7 @@ data class HardwareTestRecord(
     val backend: BackendId,
     val encoderVersion: Int,
     val paper: PaperSize,
+    val customPaperSize: CustomPaperSizeMicrons? = null,
     val resolution: PrinterResolution?,
     val color: ColorMode,
     val duplex: DuplexMode,
@@ -93,6 +94,7 @@ data class VerifiedPrinterProfile(
     val ippFormats: Set<String>,
     val backend: BackendId,
     val paper: PaperSize,
+    val customPaperSize: CustomPaperSizeMicrons? = null,
     val resolution: PrinterResolution?,
     val color: ColorMode,
     val duplex: DuplexMode,
@@ -113,7 +115,7 @@ data class VerifiedPrinterProfile(
         require(testedAtEpochMs > 0)
         val latest = history.last()
         require(backend == latest.backend && encoderVersions[backend] == latest.encoderVersion)
-        require(paper == latest.paper && resolution == latest.resolution && color == latest.color && duplex == latest.duplex)
+        require(paper == latest.paper && customPaperSize == latest.customPaperSize && resolution == latest.resolution && color == latest.color && duplex == latest.duplex)
         require(result == latest.outcome && issues == latest.issues && testedAtEpochMs == latest.testedAtEpochMs)
     }
 }
@@ -136,6 +138,7 @@ object VerifiedPrinterProfileFactory {
             backend = backend,
             encoderVersion = encoderVersion,
             paper = settings.paperSize,
+            customPaperSize = settings.customPaperSize,
             resolution = settings.selectedResolution,
             color = settings.colorMode,
             duplex = settings.duplexMode,
@@ -169,6 +172,7 @@ object VerifiedPrinterProfileFactory {
             ippFormats = printer.ipp.documentFormatsSupported,
             backend = backend,
             paper = settings.paperSize,
+            customPaperSize = settings.customPaperSize,
             resolution = settings.selectedResolution,
             color = settings.colorMode,
             duplex = settings.duplexMode,

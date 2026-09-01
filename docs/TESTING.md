@@ -20,7 +20,7 @@ Windows:
 .\gradlew.bat assembleDebug
 ```
 
-The first public release baseline is 61 JVM tests. The development branch baseline after IPP PWG, hardware-test profiles/export, and N-up is 112 JVM tests. The number is not a target by itself; wire boundaries, protocol selection, cleanup, state transitions, privacy invariants, layout ordering, and overflow behavior are the important coverage.
+The first public release baseline is 61 JVM tests. The development branch baseline after IPP PWG, hardware-test profiles/export, N-up, and confirmed custom paper is 127 JVM tests. The number is not a target by itself; wire boundaries, protocol selection, cleanup, state transitions, privacy invariants, layout ordering, and overflow behavior are the important coverage.
 
 ## JVM and unit tests
 
@@ -30,6 +30,7 @@ The unit suite covers:
 - backend selection and effective capability intersection;
 - settings validation, page ranges, copies, collation, odd/even, and reverse ordering;
 - physical page layout, margins, positioning, scaling, and memory policy;
+- decimal millimetre/inch to micron conversion, confirmed custom-media min/max, orientation and hardware-margin checks, and checked micron-to-raster arithmetic;
 - 2-up/4-up grouping, odd final sheets, range/reverse, collated and uncollated copies, portrait/landscape grids, spacing, borders, auto-rotation, and duplex planning;
 - USB partial-write handling;
 - MIME/document classification and DataStore-compatible domain behavior.
@@ -44,6 +45,7 @@ The unit suite covers:
 - Get-Printer-Attributes requested list
 - Capability mapping, media-col, micrometre conversion, raw media keywords, and asymmetric resolution
 - Print-Job attributes and document length
+- custom `media-col/media-size` encoding and exclusion of unreported margin/source/type collection members
 - Prevention of legacy raw fallback on an IPP-only interface
 - IPP PWG selection only for Print-Job, exact MIME, supported raster type, and supported resolution
 - Exact combined HTTP Content-Length and exact IPP-plus-document bytes
@@ -63,12 +65,13 @@ The unit suite covers:
 - Deterministic profile codec round trip for Unicode/reserved characters and malformed-record rejection
 - Compatibility JSON required-field/escaping checks and explicit exclusion of actual identity hash, raw identifiers, notes, document metadata, URI, filename, and payload
 - N-up preset codec round trip and safe defaults when decoding presets saved before N-up options existed
+- custom micron preset/profile round trip and compatibility JSON schema coverage
 
-The Compose dialogs and Canvas N-up preview are not covered by an Android connected test because no emulator/device target is available. This remains `NOT RUN`, not a passed UI test.
+The Compose settings/custom-unit dialogs and Canvas N-up preview are not covered by an Android connected test because no emulator/device target is available. This remains `NOT RUN`, not a passed UI test.
 
 ## Golden and invariant tests
 
-PWG Raster uses a test-only inspector that parses complete generated streams. Fixtures check the sync word, full header, line encoding, page height, media, orientation, 300/600 DPI, color/grayscale/mono, duplex, and multi-page boundaries. Producer tests compare exact complete bytes, preserve multi-page order, and verify cancellation before the first byte. Job-planner tests verify software page range and copies without IPP duplication.
+PWG Raster uses a test-only inspector that parses complete generated streams. Fixtures check the sync word, full header, line encoding, page height, standard or unnamed custom media, numeric page size, orientation, 300/600 DPI, color/grayscale/mono, duplex, and multi-page boundaries. Producer tests compare exact complete bytes, preserve multi-page order, and verify cancellation before the first byte. Job-planner tests verify software page range and copies without IPP duplication.
 
 PCL 5 tests parse the exact emitted subset: reset, media, orientation, resolution, duplex, row payload boundaries, raster end, and form feed.
 
@@ -78,7 +81,7 @@ These inspectors are intentionally separate from production parsing. They are st
 
 ## Memory and stress tests
 
-Tests cover checked arithmetic, allowed and rejected paper/DPI combinations, invalid dimensions, large source metadata, asymmetric resolutions, and extreme margins. These do not replace low-RAM device measurements.
+Tests cover checked arithmetic, allowed and rejected paper/DPI combinations, exact custom dimensions, invalid and overflowing dimensions, large source metadata, asymmetric resolutions, and extreme user/hardware margins. These do not replace low-RAM device measurements.
 
 ## Instrumented tests
 

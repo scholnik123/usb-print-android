@@ -27,6 +27,7 @@ class IppCapabilityMapperTest {
             IppAttribute("media-source-supported", listOf(IppValue.Keyword("tray-2"), IppValue.Keyword("manual"))),
             IppAttribute("media-type-supported", listOf(IppValue.Keyword("cardstock"))),
             IppAttribute("output-bin-supported", listOf(IppValue.Keyword("face-up"))),
+            IppAttribute("media-col-supported", listOf(IppValue.Keyword("media-size"), IppValue.Keyword("media-source"))),
             IppAttribute("job-creation-attributes-supported", listOf(IppValue.Keyword("copies"), IppValue.Keyword("media-source")))
         ))))
         val mapped = IppPrinterCapabilitiesMapper.map(PrinterCapabilities(vendorId = 1, productId = 2, usbDeviceId = 3, ipp = IppPrinterInfo(setOf(1, 2))), response)
@@ -39,6 +40,7 @@ class IppCapabilityMapperTest {
         assertTrue(ColorMode.COLOR in mapped.reportedColorModes!!.value)
         assertTrue(DuplexMode.LONG_EDGE in mapped.reportedDuplexModes!!.value)
         assertEquals(setOf("tray-2", "manual"), mapped.reportedMediaSourceOptions!!.value.map { it.rawKeyword }.toSet())
+        assertEquals(setOf("media-size", "media-source"), mapped.ipp.mediaColSupported)
         assertFalse(mapped.ipp.pageRangesSupported)
     }
 
@@ -48,10 +50,15 @@ class IppCapabilityMapperTest {
             "y-dimension" to listOf(IppValue.IntegerRange(15_000, 50_000))
         ))
         val mediaCol = IppValue.CollectionValue(mapOf("media-size" to listOf(mediaSize)))
-        val response = IppResponse(IppVersion(), 0, 3, listOf(IppAttributeGroup(IppGroupTag.PRINTER_ATTRIBUTES, listOf(IppAttribute("media-col-database", mediaCol)))))
+        val response = IppResponse(IppVersion(), 0, 3, listOf(IppAttributeGroup(IppGroupTag.PRINTER_ATTRIBUTES, listOf(
+            IppAttribute("media-col-database", mediaCol),
+            IppAttribute("media-col-supported", IppValue.Keyword("media-size")),
+            IppAttribute("job-creation-attributes-supported", IppValue.Keyword("media-col"))
+        ))))
         val mapped = IppPrinterCapabilitiesMapper.map(PrinterCapabilities(vendorId = 1, productId = 2, usbDeviceId = 3), response)
         val range = mapped.reportedCustomPaperRangeMicrons!!.value
         assertEquals(100_000L, range.minWidth.value)
         assertEquals(500_000L, range.maxHeight.value)
+        assertEquals(setOf("media-size"), mapped.ipp.mediaColSupported)
     }
 }

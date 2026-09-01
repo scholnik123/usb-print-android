@@ -5,7 +5,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import ru.usbprint.domain.model.Orientation
 import ru.usbprint.domain.model.ContentPosition
+import ru.usbprint.domain.model.CustomPaperSizeMicrons
 import ru.usbprint.domain.model.HardwareMarginsMm
+import ru.usbprint.domain.model.Microns
 import ru.usbprint.domain.model.PaperSize
 import ru.usbprint.domain.model.PrintSettings
 import ru.usbprint.domain.model.ScalingMode
@@ -33,5 +35,15 @@ class PrintLayoutEngineTest {
     }
     @Test(expected = IllegalArgumentException::class) fun rejectsRasterPageAboveSharedMemoryBudget() {
         PrintLayoutEngine.create(PrintSettings(paperSize = PaperSize.A0), 100, 100, 300)
+    }
+    @Test fun customMicronMediaControlsExactPortraitAndLandscapeRasterDimensions() {
+        val custom = CustomPaperSizeMicrons(Microns(100_000), Microns(200_000))
+        val portrait = PrintLayoutEngine.create(PrintSettings(customPaperSize = custom, orientation = Orientation.PORTRAIT), 595, 842, 300)
+        val landscape = PrintLayoutEngine.create(PrintSettings(customPaperSize = custom, orientation = Orientation.LANDSCAPE), 595, 842, 300)
+        assertEquals(1_181, portrait.widthPx)
+        assertEquals(2_362, portrait.heightPx)
+        assertEquals(2_362, landscape.widthPx)
+        assertEquals(1_181, landscape.heightPx)
+        assertEquals("", portrait.mediaName)
     }
 }
