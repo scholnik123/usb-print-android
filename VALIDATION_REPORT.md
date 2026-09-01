@@ -1,6 +1,6 @@
-# USB Print 1.0.0 validation report
+# USB Print 1.0.1 validation report
 
-Validation date: 2026-08-31.
+Validation date: 2026-09-01.
 
 This report separates deterministic local checks from external reference-tool and physical printer validation. A successful JVM test or USB transfer is not presented as proof of correct paper output.
 
@@ -78,9 +78,10 @@ Low-RAM physical Android validation: **not run**.
 
 | Check | Result |
 |---|---|
-| `testDebugUnitTest` | 61 tests passed, 0 failed, 0 skipped |
-| `lintDebug` | Passed; 0 errors, 8 GradleDependency warnings |
+| `testDebugUnitTest` | 134 tests passed, 0 failed, 0 skipped |
+| `lintDebug` | Passed; 0 errors, 10 GradleDependency warnings |
 | `assembleDebug` | Passed |
+| `assembleDebugAndroidTest` | Passed; 7 Compose test scenarios compiled into the test APK |
 | Connected Android tests | Not run: no device/emulator |
 | Hardware printer tests | 0 printers |
 
@@ -103,24 +104,30 @@ Hardware-tested printers: **0**.
 
 No manufacturer or model is claimed as hardware-compatible in this release. Evidence-backed results can be submitted with the printer compatibility issue form after removing private document information and serial numbers.
 
+## Responsive UI
+
+Status: **passed source/JVM/build verification; connected execution not run**.
+
+The current UI uses Compact/Medium/Expanded width classes, scroll-safe single-column layouts, an Expanded two-pane layout, safe-drawing/IME insets, bounded previews and printer lists, large-text reflow, dark system-bar resources, and accessible labeled toggles. Width boundaries have deterministic JVM coverage and seven Compose instrumentation scenarios compile successfully. No device or AVD was available, so screenshots, TalkBack, real IME/system-bar behavior, rotation, foldable posture, and connected test execution remain `NOT RUN`. See `docs/UI_VALIDATION.md` for the exact matrix and remaining manual checklist.
+
 ## APK verification
 
-The public release asset is `USB-Print-1.0.0-debug.apk` (17,424,924 bytes). It is debug-signed for direct installation and testing; no production signing key is stored in the repository.
+The public release asset is `USB-Print-1.0.1-debug.apk` (17,589,392 bytes). It is debug-signed for direct installation and testing; no production signing key is stored in the repository.
 
 Android build tools verified:
 
-- SHA-256 `d8657cd9da12689628eec136d085d8e34bbafc75dd397fdd86679b1ee81f9370`;
+- SHA-256 `284385bd4bb82d3f6169b6041c739878b12d9b5a5a837d19ccfe9ead49a24a7b`;
 - package `ru.usbprint`;
-- `versionName 1.0.0` and `versionCode 1`;
+- `versionName 1.0.1` and `versionCode 2`;
 - minSdk 26 and targetSdk 35;
 - APK Signature Scheme v2 with one Android Debug signer;
 - no `INTERNET`, `ACCESS_NETWORK_STATE`, Wi-Fi, Bluetooth, or broad external-storage permission.
 
-The complete release verification summary is recorded in `RELEASE_NOTES_1.0.0.md`, and the distributable checksum is recorded in `SHA256SUMS.txt`.
+The complete release verification summary is recorded in `RELEASE_NOTES_1.0.1.md`, and the distributable checksum is recorded in `SHA256SUMS.txt`.
 
-## Development branch addendum
+## Pre-1.0.1 development validation history
 
-This section is not part of the public 1.0.0 release verification and does not change the released APK claims.
+The following entries record the incremental checks that preceded the combined 1.0.1 release. The final release results above supersede their intermediate test counts.
 
 At commit `18cd740`, the development branch adds IPP PWG Raster Print-Job with a bounded app-cache spool and exact Content-Length. Local verification completed with 79 JVM tests passed, 0 failed, 0 skipped; lint passed with 0 errors and the existing 8 GradleDependency warnings; `assembleDebug` passed. GitHub Android CI run `33409651029` passed tests, lint, assembly, and artifact upload.
 

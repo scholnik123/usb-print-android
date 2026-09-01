@@ -4,7 +4,11 @@ All notable public changes are documented here. This project begins its public s
 
 ## Unreleased
 
-Development changes below are not part of the published 1.0.0 APK.
+No changes yet.
+
+## 1.0.1 - 2026-09-01
+
+This release brings the completed post-1.0.0 development work into `main` and the public APK.
 
 ### Added
 
@@ -29,6 +33,10 @@ Development changes below are not part of the published 1.0.0 APK.
 - Honest application-side progress in exact bytes, rendered pages, or completed physical sheets when totals are known, with an indeterminate state when they are not
 - Local per-job metrics for prepare/render/encode/USB-write/IPP-wait time, generated/sent bytes, rendered pages, physical sheets, and peak tracked raster buffers
 - Bounded in-memory diagnostics: the latest 20 job metrics, 200 general log entries, and 500 characters per log entry
+- Responsive Compact/Medium/Expanded Compose layouts, an Expanded two-pane main screen, safe system-bar/IME insets, dark system-bar resources, and bounded document-preview placeholders
+- Large-text-safe controls, accessible labeled toggles, complete scrollable error presentation, rotation-safe dialog drafts, and a bounded 20-printer selector
+- Compose previews for compact portrait, short landscape, medium, expanded, dark theme, and font scale 2.0
+- Seven responsive Compose instrumentation scenarios covering narrow/large-text layouts, Expanded reflow, 20 printers, maximum settings capabilities, and 100 KB diagnostics
 
 ### Changed
 
@@ -37,10 +45,12 @@ Development changes below are not part of the published 1.0.0 APK.
 - IPP PWG rejects unimplemented raster encodings such as `srgb_16` instead of treating them as compatible
 - Page selection, reverse order, collated/uncollated copies, and then N-up grouping now form one deterministic pre-backend pipeline
 - Printer profile and compatibility-export schemas advance to version 2 so custom-media evidence is distinguishable from standard paper while prior observations remain readable
+- Initial share/view intents are no longer reprocessed after Activity recreation; print/domain state remains ViewModel/application-owned
 
 ### Validation
 
-- 133 JVM tests pass on the development branch; Android lint and debug assembly pass
+- 134 JVM tests pass on `main`; Android lint, debug APK assembly, and instrumentation test APK assembly pass
+- Seven Android UI tests compile; connected execution and screenshots remain not run because no device or AVD is available
 - Hardware-tested printers remain 0; no physical IPP PWG compatibility is claimed
 
 ## 1.0.0 - 2026-08-31

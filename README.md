@@ -14,7 +14,7 @@ No cloud. No account. No computer. No vendor print service.
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.0-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org/)
 [![API](https://img.shields.io/badge/API-26%2B-2457A5)](app/build.gradle.kts)
 [![Jetpack Compose](https://img.shields.io/badge/UI-Jetpack%20Compose-4285F4)](https://developer.android.com/compose)
-[![Release](https://img.shields.io/badge/release-1.0.0-2457A5)](https://github.com/scholnik123/usb-print-android/releases/tag/v1.0.0)
+[![Release](https://img.shields.io/badge/release-1.0.1-2457A5)](https://github.com/scholnik123/usb-print-android/releases/tag/v1.0.1)
 [![Android CI](https://github.com/scholnik123/usb-print-android/actions/workflows/android.yml/badge.svg)](https://github.com/scholnik123/usb-print-android/actions/workflows/android.yml)
 
 > Printer compatibility depends on the protocol and command language implemented by the specific printer. Some host-based/GDI printers require a proprietary desktop driver and cannot be driven by this application.
@@ -23,9 +23,9 @@ No cloud. No account. No computer. No vendor print service.
 
 Download the current APK from [GitHub Releases](https://github.com/scholnik123/usb-print-android/releases/latest).
 
-The first public APK is debug-signed and intended for direct installation and testing. A production signing key is not included in this repository.
+The published APK is debug-signed and intended for direct installation and testing. A production signing key is not included in this repository.
 
-> **Development branch:** `codex/development` contains IPP PWG Raster Print-Job, explicit hardware-result profiles/export, software 2-up/4-up, confirmed IPP custom-paper sizes, and local job metrics with real progress completed after 1.0.0. These changes are not part of the published 1.0.0 APK and have not yet been validated on a physical printer.
+> **Current release:** 1.0.1 includes the post-1.0.0 IPP PWG Raster path, hardware-result profiles/export, software 2-up/4-up, confirmed IPP custom-paper sizes, local job metrics/progress, and the responsive UI pass. These capabilities have deterministic test coverage but have not yet been validated on a physical printer.
 
 ## Features
 
@@ -33,7 +33,7 @@ The first public APK is debug-signed and intended for direct installation and te
 - Automatic USB printer discovery and selection between multiple connected printers
 - Capability-driven print settings with explicit source and confidence
 - IPP-over-USB discovery and HTTP/IPP transport over USB bulk endpoints
-- IPP Get-Printer-Attributes, direct PDF Print-Job, development IPP PWG Print-Job, short-lived job status polling, and Cancel-Job when reported
+- IPP Get-Printer-Attributes, direct PDF Print-Job, IPP PWG Print-Job, short-lived job status polling, and Cancel-Job when reported
 - PDF Direct, PWG Raster, PostScript Raster, PCL 5 Raster, ESC/POS, and raw printer-language passthrough
 - PDF, image, and UTF-8 text rendering
 - Foreground print jobs with notification cancellation
@@ -51,12 +51,12 @@ For compatible printers, the application can:
 - read printer capabilities with Get-Printer-Attributes;
 - build the settings UI from reported media, resolution, color, duplex, tray, media type, and output-bin values;
 - send a PDF with Print-Job when both the operation and `application/pdf` are reported;
-- on the development branch, render PDF/image/text into PWG Raster and submit it with one Print-Job when `image/pwg-raster`, a compatible raster type, resolution, and Print-Job are reported;
+- render PDF/image/text into PWG Raster and submit it with one Print-Job when `image/pwg-raster`, a compatible raster type, resolution, and Print-Job are reported;
 - query short-lived job status and send Cancel-Job when those operations are reported.
 
 IPP PWG uses a unique, size-bounded file under the application cache to obtain an exact HTTP Content-Length. The file is removed after success, error, or cancellation, and abandoned spool files are cleaned at application startup. Copies and page selection are encoded once in the generated PWG document rather than repeated as IPP job attributes.
 
-This is not a claim of full IPP Everywhere support. IPP PWG is a development capability with no physical-printer evidence yet. The Create-Job + Send-Document workflow is not implemented.
+This is not a claim of full IPP Everywhere support. IPP PWG has no physical-printer evidence yet. The Create-Job + Send-Document workflow is not implemented.
 
 ## Capability-driven printing
 
@@ -91,7 +91,7 @@ Available settings depend on the printer and selected backend. N-up is presented
 | Backend | Status | Typical use |
 |---|---|---|
 | IPP Direct PDF | Implemented | Direct PDF Print-Job through IPP-over-USB |
-| IPP PWG Raster | Implemented on development branch | Software layout and PWG Raster Print-Job through IPP-over-USB |
+| IPP PWG Raster | Implemented | Software layout and PWG Raster Print-Job through IPP-over-USB |
 | PDF Direct USB | Implemented | Unmodified PDF to a legacy printer that reports PDF |
 | PWG Raster | Implemented | Rendered PDF/image/text for printers that report PWG Raster |
 | PostScript Raster | Implemented subset | Level 2 rasterized pages for PostScript printers |
@@ -158,15 +158,15 @@ Requirements:
 
 `SENT` means the USB connection accepted the job bytes. It does not prove that the physical page was printed correctly.
 
-When the development build sends the built-in A4 hardware-test page, it asks what the user physically observed. The choices distinguish a correct page, a page with classified defects, an accepted job with no page, a printer error, no visible action, a lost connection, and another described result. Dismissing the dialog keeps an explicit “evaluate result” action available. A transport or IPP success never chooses an answer for the user.
+When the application sends the built-in A4 hardware-test page, it asks what the user physically observed. The choices distinguish a correct page, a page with classified defects, an accepted job with no page, a printer error, no visible action, a lost connection, and another described result. Dismissing the dialog keeps an explicit “evaluate result” action available. A transport or IPP success never chooses an answer for the user.
 
-After an explicit answer, the development build stores a local versioned profile with app/encoder versions, printer model and VID/PID, a SHA-256 device identifier instead of a raw serial, reported languages/formats, exact tested settings (including custom dimensions in microns), result date, and up to 20 historical observations. An encoder-version or profile-schema change preserves the history but changes the status to `NEEDS_REVALIDATION`. No profile is created from USB or IPP status alone.
+After an explicit answer, the application stores a local versioned profile with app/encoder versions, printer model and VID/PID, a SHA-256 device identifier instead of a raw serial, reported languages/formats, exact tested settings (including custom dimensions in microns), result date, and up to 20 historical observations. An encoder-version or profile-schema change preserves the history but changes the status to `NEEDS_REVALIDATION`. No profile is created from USB or IPP status alone.
 
 A saved profile can be exported as `USB-Print-compatibility.json` for review and attachment to the GitHub compatibility issue. The public record contains app and Android versions, printer model and VID/PID, backend/encoder version, reported languages/formats, tested settings, status/outcome/issues, date, and observation count. It excludes the stored identity hash, raw serial/device key, free-form notes, document name/content/URI, and print payload.
 
 ## Progress and local metrics
 
-The development branch reports only measurable work. Direct and IPP uploads show bytes when an exact total is known; raster backends show completed physical sheets; ESC/POS image output shows completed logical pages. A phase with no trustworthy total uses an indeterminate indicator instead of a simulated percentage. `100%` or `SENT` still means that the application completed its local transfer workflow, not that paper physically exited the printer.
+The application reports only measurable work. Direct and IPP uploads show bytes when an exact total is known; raster backends show completed physical sheets; ESC/POS image output shows completed logical pages. A phase with no trustworthy total uses an indeterminate indicator instead of a simulated percentage. `100%` or `SENT` still means that the application completed its local transfer workflow, not that paper physically exited the printer.
 
 For diagnostics, each accepted job records local prepare, render, encode, completed USB-write, and IPP-wait time; generated and successfully written bytes; rendered logical pages; completed physical sheets; and the highest tracked raster-buffer allocation. Only the last 20 jobs in the current application process are retained. The general diagnostic log is limited to 200 entries and 500 characters per entry. These records are not telemetry, are not uploaded, reset with the process, and do not contain document contents, payload bytes, preview images, filenames, or document URIs.
 
@@ -204,7 +204,7 @@ The APK is generated at `app/build/outputs/apk/debug/app-debug.apk`.
 
 ## Validation
 
-The first public release passes 61 JVM tests covering IPP wire format and malformed input, HTTP framing, capability mapping, USB discovery, PWG/PCL/PostScript invariants, page planning, and raster memory calculations. The development branch passes 133 JVM tests after adding exact-length IPP PWG coverage, the hardware-test workflow, versioned profiles/export, deterministic N-up checks, confirmed custom-paper conversion/validation/wire-format coverage, and bounded local metrics/progress checks.
+Release 1.0.1 passes 134 JVM tests covering IPP framing and capability mapping, USB discovery, PWG/PCL/PostScript invariants, IPP PWG submission, page planning, N-up, custom media, hardware-result profiles/export, bounded progress/metrics, responsive width classification, and overflow behavior. Seven Compose responsive instrumentation scenarios compile; connected execution remains not run because no device or emulator is available.
 
 Internal golden/invariant tests are not equivalent to external validation through CUPS, Ghostscript, or ipptool, and they are not a substitute for physical printer testing. See [VALIDATION_REPORT.md](VALIDATION_REPORT.md) and [docs/TESTING.md](docs/TESTING.md).
 
@@ -213,10 +213,10 @@ Internal golden/invariant tests are not equivalent to external validation throug
 - Compatibility depends on standards and command languages implemented by the printer.
 - Host-based/GDI printers may require proprietary desktop drivers.
 - No hardware-verified printers have been recorded for this release.
-- IPP PWG is implemented only on the development branch and still lacks external reference-tool and physical-printer validation; Create-Job + Send-Document is not implemented.
+- IPP PWG still lacks external reference-tool and physical-printer validation; Create-Job + Send-Document is not implemented.
 - PCLm, PCL XL/PCL6, URF, and vendor-specific protocols are not implemented.
 - Software N-up is limited to 1, 2, or 4 logical pages and the four composing raster backends; connected-device preview/printing validation is still not run.
-- Development custom paper is limited to IPP Direct and IPP PWG, requires a printer-confirmed range plus writable `media-col/media-size`, and has not been validated on a physical printer.
+- Custom paper is limited to IPP Direct and IPP PWG, requires a printer-confirmed range plus writable `media-col/media-size`, and has not been validated on a physical printer.
 - Progress describes application-side bytes/pages/sheets and cannot establish physical print completion. Failed USB writes expose elapsed time but the transport API cannot report a partially accepted prefix from the failing call.
 - Job-metric history is intentionally in-memory and limited to the latest 20 jobs; it is cleared when the application process restarts.
 - Compatibility JSON must still be reviewed and submitted by the user; the application never publishes it automatically.
@@ -232,7 +232,7 @@ See [COMPATIBILITY.md](COMPATIBILITY.md) for evidence levels and the reporting t
 ## Roadmap
 
 - Physical printer validation and evidence-backed compatibility reports
-- Physical-printer validation of the development IPP PWG Raster path
+- Physical-printer validation of the IPP PWG Raster path
 - Profile history/review management UI
 - Large-document and custom-media stress hardening
 - PCLm and expanded standards-based compatibility
@@ -243,6 +243,7 @@ No delivery dates are promised.
 
 - [Architecture](docs/ARCHITECTURE.md)
 - [Testing](docs/TESTING.md)
+- [UI validation](docs/UI_VALIDATION.md)
 - [Print capabilities](PRINT_CAPABILITIES.md)
 - [Backend matrix](BACKEND_MATRIX.md)
 - [Compatibility](COMPATIBILITY.md)

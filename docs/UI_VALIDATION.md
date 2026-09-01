@@ -2,7 +2,7 @@
 
 Date: 2026-09-01  
 Branch: `main`  
-Scope: responsive/adaptive Compose UI stability pass for USB Print 1.0.0  
+Scope: responsive/adaptive Compose UI stability pass included in USB Print 1.0.1
 Result vocabulary: `PASS` means that the named automated check actually ran successfully; `NOT RUN` means that the environment did not permit the check. A compiled preview or test is not reported as a rendered or executed device check.
 
 ## Summary
@@ -176,6 +176,6 @@ Run this checklist before calling a specific device family visually certified:
 | `4ba18f6` `fix(ui): adapt print settings to compact screens` | Settings/dialog responsiveness | GitHub Actions PASS, run 33489703545 |
 | `e8b96cf` `fix(ui): support large text and accessible controls` | Large text/accessibility/state | GitHub Actions PASS, run 33493224765 |
 | `e371fb3` `feat(ui): add adaptive tablet layouts` | Expanded layout/previews | GitHub Actions PASS, run 33494014585 |
-| `test(ui): add responsive layout coverage` | Instrumentation fixtures and this report | Commit hash and CI run are reported in the final task handoff |
+| `bb012ef` `test(ui): add responsive layout coverage` | Instrumentation fixtures and this report | GitHub Actions PASS, run 33542735813 |
 
-All completed stage commits above were pushed directly to `origin/main`. The final test/docs stage must also pass `testDebugUnitTest`, `lintDebug`, `assembleDebug`, Android-test compilation, push, and GitHub Actions before the UI pass is considered complete.
+All five stage commits above were pushed directly to `origin/main`. The final UI stage passed `testDebugUnitTest`, `lintDebug`, `assembleDebug`, Android-test compilation, and GitHub Actions.

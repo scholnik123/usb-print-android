@@ -20,7 +20,7 @@ Windows:
 .\gradlew.bat assembleDebug
 ```
 
-The first public release baseline is 61 JVM tests. The development branch baseline after IPP PWG, hardware-test profiles/export, N-up, confirmed custom paper, and local progress/metrics is 133 JVM tests. The number is not a target by itself; wire boundaries, protocol selection, cleanup, state transitions, privacy invariants, layout ordering, metrics bounds, and overflow behavior are the important coverage.
+The 1.0.1 release baseline is 134 JVM tests after IPP PWG, hardware-test profiles/export, N-up, confirmed custom paper, local progress/metrics, and responsive width classification. The number is not a target by itself; wire boundaries, protocol selection, cleanup, state transitions, privacy invariants, layout ordering, metrics bounds, and overflow behavior are the important coverage.
 
 ## JVM and unit tests
 
@@ -70,7 +70,7 @@ The unit suite covers:
 - N-up preset codec round trip and safe defaults when decoding presets saved before N-up options existed
 - custom micron preset/profile round trip and compatibility JSON schema coverage
 
-The Compose settings/custom-unit dialogs and Canvas N-up preview are not covered by an Android connected test because no emulator/device target is available. This remains `NOT RUN`, not a passed UI test.
+Responsive Compose tests cover compact and large-text scrolling, Expanded two-pane/reflow behavior, a 20-printer selector, maximum-capability settings, and 100 KB diagnostics. They compile into the Android test APK, but connected execution remains `NOT RUN` because no emulator/device target is available.
 
 ## Golden and invariant tests
 
@@ -88,13 +88,13 @@ Tests cover checked arithmetic, allowed and rejected paper/DPI combinations, exa
 
 ## Instrumented tests
 
-No Android instrumented test suite is currently included. `connectedDebugAndroidTest` was not run for the first release because no device or emulator was available. This is a known gap, not a unit-test success.
+Seven Android Compose instrumentation scenarios are included and their test APK assembles successfully. `connectedDebugAndroidTest` was not run for 1.0.1 because no device or emulator was available. This is a known execution gap, not a connected-test success.
 
 Future connected coverage should include Activity startup/recreation, settings restoration, SAF export, foreground service lifecycle, and notification cancellation.
 
 ## Hardware tests
 
-Hardware-tested printers for 1.0.0 and the current development branch: **0**.
+Hardware-tested printers for 1.0.1: **0**.
 
 Do not treat any of the following as a visually confirmed print:
 
@@ -109,7 +109,7 @@ A hardware result requires the exact printer model, Android/OTG environment, bac
 
 ## External reference validation
 
-Not run for 1.0.0 or the current development IPP PWG path. CUPS/cupsfilter, Ghostscript, and ipptool were unavailable in the development environment. No external validation badge or claim is made.
+Not run for the 1.0.1 IPP PWG path. CUPS/cupsfilter, Ghostscript, and ipptool were unavailable in the release environment. No external validation badge or claim is made.
 
 ## CI
 
