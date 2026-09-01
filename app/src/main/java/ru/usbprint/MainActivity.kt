@@ -11,6 +11,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.activity.viewModels
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -30,6 +32,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.Usb
 import androidx.compose.material3.AlertDialog
@@ -49,8 +52,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -67,6 +68,8 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ru.usbprint.domain.logic.PageRangeParser
@@ -116,10 +119,12 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        if (android.os.Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            requestNotifications.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        if (savedInstanceState == null) {
+            if (android.os.Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                requestNotifications.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+            }
+            handleIncomingIntent(intent)
         }
-        handleIncomingIntent(intent)
         setContent {
             UsbPrintTheme(darkTheme = androidx.compose.foundation.isSystemInDarkTheme()) {
                 UsbPrintScreen(
@@ -159,13 +164,12 @@ private fun UsbPrintScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val logs by viewModel.logs.collectAsStateWithLifecycle()
-    val snackbars = remember { SnackbarHostState() }
     var showSettings by rememberSaveable { mutableStateOf(false) }
     var showDiagnostics by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(state.error) { state.error?.let { snackbars.showSnackbar(it.userMessage); viewModel.clearError() } }
+    var errorMessage by rememberSaveable { mutableStateOf<String?>(null) }
+    LaunchedEffect(state.error) { state.error?.let { errorMessage = it.userMessage; viewModel.clearError() } }
     Scaffold(
         topBar = { TopAppBar(title = { Text("USB Print") }, actions = { IconButton(onClick = { showDiagnostics = true }) { Icon(Icons.Default.Usb, "Информация о принтере") } }, colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)) },
-        snackbarHost = { SnackbarHost(snackbars) },
         contentWindowInsets = WindowInsets.safeDrawing
     ) { padding ->
         AdaptiveContentContainer(
@@ -209,6 +213,7 @@ private fun UsbPrintScreen(
         onAdvancedMode = viewModel::setAdvancedMode, onSaveOverride = viewModel::saveExperimentalOverride
     )
     if (showDiagnostics) DiagnosticsDialog(viewModel.diagnostics(), logs, onExportText, onExportJson, onDismiss = { showDiagnostics = false })
+    errorMessage?.let { message -> ErrorDialog(message, onDismiss = { errorMessage = null }) }
     if (state.showHardwareTestWizard) HardwareTestResultDialog(
         onDismiss = viewModel::dismissHardwareTestWizard,
         onSave = viewModel::recordHardwareTestObservation
@@ -220,9 +225,11 @@ private fun HardwareTestResultDialog(
     onDismiss: () -> Unit,
     onSave: (HardwareTestOutcome, Set<HardwarePrintIssue>, String?) -> Unit
 ) {
-    var outcome by remember { mutableStateOf<HardwareTestOutcome?>(null) }
-    var issues by remember { mutableStateOf(emptySet<HardwarePrintIssue>()) }
-    var notes by remember { mutableStateOf("") }
+    var outcomeName by rememberSaveable { mutableStateOf<String?>(null) }
+    var issueNamesValue by rememberSaveable { mutableStateOf("") }
+    var notes by rememberSaveable { mutableStateOf("") }
+    val outcome = outcomeName?.let { name -> HardwareTestOutcome.entries.firstOrNull { it.name == name } }
+    val issues = issueNamesValue.split('|').mapNotNull { name -> HardwarePrintIssue.entries.firstOrNull { it.name == name } }.toSet()
     val canSave = outcome != null &&
         (outcome != HardwareTestOutcome.PRINTED_WITH_ISSUES || issues.isNotEmpty()) &&
         (outcome != HardwareTestOutcome.OTHER || notes.isNotBlank())
@@ -236,18 +243,18 @@ private fun HardwareTestResultDialog(
                 Text("SENT или IPP completed не подтверждают физическую печать. Выберите только то, что вы увидели.")
                 if (outcome == null) {
                     HardwareTestOutcome.entries.forEach { item ->
-                        OutlinedButton(onClick = { outcome = item }, modifier = Modifier.fillMaxWidth()) { Text(item.label) }
+                        OutlinedButton(onClick = { outcomeName = item.name }, modifier = Modifier.fillMaxWidth()) { Text(item.label) }
                     }
                 } else {
                     Text("Результат: ${outcome?.label}", style = MaterialTheme.typography.titleSmall)
-                    OutlinedButton(onClick = { outcome = null; issues = emptySet() }) { Text("Изменить результат") }
+                    OutlinedButton(onClick = { outcomeName = null; issueNamesValue = "" }) { Text("Изменить результат") }
                     if (outcome == HardwareTestOutcome.PRINTED_WITH_ISSUES) {
                         Text("Отметьте все замеченные проблемы:")
                         ResponsiveChoiceFlow {
                             HardwarePrintIssue.entries.forEach { issue ->
                                 FilterChip(
                                     selected = issue in issues,
-                                    onClick = { issues = if (issue in issues) issues - issue else issues + issue },
+                                    onClick = { issueNamesValue = (if (issue in issues) issues - issue else issues + issue).joinToString("|") { it.name } },
                                     label = { Text(issue.label) }
                                 )
                             }
@@ -418,7 +425,7 @@ private fun availablePrinters(state: MainUiState): List<PrinterRef> = when (val 
             OutlinedButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) { Text("Отменить") }
         }
     } else {
-        Button(onClick = onPrint, modifier = Modifier.fillMaxWidth().height(56.dp), enabled = state.document != null && state.usb is UsbPrinterState.Ready && state.backend.selected != BackendId.NONE) { Icon(Icons.Default.Print, null); Spacer(Modifier.size(10.dp)); Text("Печать") }
+        Button(onClick = onPrint, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), enabled = state.document != null && state.usb is UsbPrinterState.Ready && state.backend.selected != BackendId.NONE) { Icon(Icons.Default.Print, null); Spacer(Modifier.size(10.dp)); Text("Печать") }
         if (state.jobStatus == PrintJobStatus.SENT) Text(state.jobDetail?.let { "Последний статус IPP: $it" } ?: "Задание передано принтеру.", color = MaterialTheme.colorScheme.primary)
     }
 }
@@ -486,12 +493,12 @@ private fun availablePrinters(state: MainUiState): List<PrinterRef> = when (val 
             }
             if (customPresets.isNotEmpty()) {
                 Text("Мои пресеты", style = MaterialTheme.typography.labelLarge)
-                customPresets.forEach { preset -> Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) { OutlinedButton({ onApplyPreset(preset.settings) }, modifier = Modifier.weight(1f)) { Text(preset.name) }; IconButton({ onDeletePreset(preset.id) }) { Text("×") } } }
+                customPresets.forEach { preset -> Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) { OutlinedButton({ onApplyPreset(preset.settings) }, modifier = Modifier.weight(1f)) { Text(preset.name) }; IconButton({ onDeletePreset(preset.id) }) { Icon(Icons.Default.Delete, "Удалить пресет ${preset.name}") } } }
             }
             OutlinedTextField(presetName, { presetName = it.take(40) }, label = { Text("Сохранить текущие настройки как") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             OutlinedButton({ onSavePreset(presetName) }, enabled = presetName.isNotBlank(), modifier = Modifier.fillMaxWidth()) { Text("Сохранить мой пресет") }
 
-            capabilities.copiesRange?.let { OutlinedTextField(copiesText, { copiesText = it.filter(Char::isDigit).take(2) }, label = { Text("Количество копий (${it.value.first}–${it.value.last})") }, singleLine = true, modifier = Modifier.fillMaxWidth(), supportingText = { Text(it.disclosure) }) }
+            capabilities.copiesRange?.let { OutlinedTextField(copiesText, { copiesText = it.filter(Char::isDigit).take(2) }, label = { Text("Количество копий (${it.value.first}–${it.value.last})") }, singleLine = true, modifier = Modifier.fillMaxWidth(), supportingText = { Text(it.disclosure) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)) }
             if (pageKinds.isNotEmpty()) {
                 Text("Страницы", style = MaterialTheme.typography.labelLarge)
                 ResponsiveChoiceFlow {
@@ -532,8 +539,8 @@ private fun availablePrinters(state: MainUiState): List<PrinterRef> = when (val 
                             heightMicrons?.let { customHeight = formatPaperDimension(it, unit) }
                         }, label = { Text(unit.label) }) }
                     }
-                    OutlinedTextField(customWidth, { customWidth = paperNumberInput(it) }, label = { Text("Ширина, ${paperUnit.symbol}") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(customHeight, { customHeight = paperNumberInput(it) }, label = { Text("Высота, ${paperUnit.symbol}") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(customWidth, { customWidth = paperNumberInput(it) }, label = { Text("Ширина, ${paperUnit.symbol}") }, singleLine = true, modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+                    OutlinedTextField(customHeight, { customHeight = paperNumberInput(it) }, label = { Text("Высота, ${paperUnit.symbol}") }, singleLine = true, modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
                     Text(
                         "Подтверждённый диапазон: ${formatPaperDimension(customRange.value.minWidth, paperUnit)}–${formatPaperDimension(customRange.value.maxWidth, paperUnit)} × " +
                             "${formatPaperDimension(customRange.value.minHeight, paperUnit)}–${formatPaperDimension(customRange.value.maxHeight, paperUnit)} ${paperUnit.symbol} · ${customRange.disclosure}",
@@ -553,7 +560,7 @@ private fun availablePrinters(state: MainUiState): List<PrinterRef> = when (val 
             capabilities.outputBinOptions?.let { KeywordChips("Выходной лоток · ${it.disclosure}", it.value, outputBinKeyword) { value -> outputBinKeyword = value } }
             if (capabilities.supportsScaling) {
                 EnumChips("Масштаб", ScalingMode.entries, scaling, { scaling = it }) { it.label }
-                if (scaling == ScalingMode.CUSTOM) OutlinedTextField(scaleText, { scaleText = it.filter(Char::isDigit).take(3) }, label = { Text("Масштаб, % (10–400)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                if (scaling == ScalingMode.CUSTOM) OutlinedTextField(scaleText, { scaleText = it.filter(Char::isDigit).take(3) }, label = { Text("Масштаб, % (10–400)") }, singleLine = true, modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
             }
             if (capabilities.supportsMargins) {
                 Text("Поля пользователя, мм", style = MaterialTheme.typography.labelLarge)
@@ -567,7 +574,7 @@ private fun availablePrinters(state: MainUiState): List<PrinterRef> = when (val 
             }
             if (capabilities.supportsPositioning) EnumChips("Позиционирование", ContentPosition.entries, position, { position = it }) { it.label }
             if (capabilities.supportsPageOrder) EnumChips("Порядок", PageOrder.entries, order, { order = it }) { it.label }
-            if (capabilities.supportsCollate) Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(collate, { collate = it }); Text("Разбирать по копиям") }
+            if (capabilities.supportsCollate) LabeledCheckbox(collate, { collate = it }, "Разбирать по копиям")
             if (nUpAvailable) {
                 EnumChips("Страниц на физическом листе", listOf(1, 2, 4), pagesPerSheet, { pagesPerSheet = it }) { it.toString() }
                 if (pagesPerSheet > 1) {
@@ -576,21 +583,27 @@ private fun availablePrinters(state: MainUiState): List<PrinterRef> = when (val 
                         { value -> nUpSpacing = value.filter { it.isDigit() || it == '.' }.take(5) },
                         label = { Text("Интервал между страницами, мм (0–20)") },
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
                     )
-                    Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(nUpBorders, { nUpBorders = it }); Text("Рамки вокруг логических страниц") }
-                    Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(nUpAutoRotate, { nUpAutoRotate = it }); Text("Автоповорот для лучшего заполнения") }
+                    LabeledCheckbox(nUpBorders, { nUpBorders = it }, "Рамки вокруг логических страниц")
+                    LabeledCheckbox(nUpAutoRotate, { nUpAutoRotate = it }, "Автоповорот для лучшего заполнения")
                 }
             }
 
             HorizontalDivider()
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) { Column(Modifier.weight(1f)) { Text("Расширенные настройки", style = MaterialTheme.typography.labelLarge); Text("Только ручные экспериментальные переопределения для этого принтера.", style = MaterialTheme.typography.bodySmall) }; Switch(advancedMode, onAdvancedMode) }
+            LabeledSwitch(
+                checked = advancedMode,
+                onCheckedChange = onAdvancedMode,
+                title = "Расширенные настройки",
+                supportingText = "Только ручные экспериментальные переопределения для этого принтера."
+            )
             if (advancedMode) {
                 Text("Экспериментальные значения помечены в диагностике и не включаются автоматически.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                 Text("Принудительный backend", style = MaterialTheme.typography.labelLarge)
                 ResponsiveChoiceFlow { FilterChip(override.forcedBackend == null, { override = override.copy(forcedBackend = null) }, label = { Text("Нет") }); compatibleBackends.forEach { id -> FilterChip(override.forcedBackend == id, { override = override.copy(forcedBackend = id) }, label = { Text(id.title) }) } }
                 capabilities.resolutions?.let { values -> ResponsiveChoiceFlow { FilterChip(override.forcedResolution == null, { override = override.copy(forcedResolution = null) }, label = { Text("Авто DPI") }); values.value.forEach { dpi -> FilterChip(override.forcedResolution == dpi, { override = override.copy(forcedResolution = dpi) }, label = { Text("Force ${dpi.displayName}") }) } } }
-                Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(override.forceMonochrome, { override = override.copy(forceMonochrome = it) }); Text("Принудительно монохром") }
+                LabeledCheckbox(override.forceMonochrome, { override = override.copy(forceMonochrome = it) }, "Принудительно монохром")
                 OutlinedButton({ onSaveOverride(override) }, modifier = Modifier.fillMaxWidth()) { Text("Сохранить переопределение") }
             }
         }
@@ -645,7 +658,37 @@ private fun formatPaperDimension(value: Microns, unit: PaperUnit): String {
 private fun paperNumberInput(value: String): String = value.replace(',', '.').filter { it.isDigit() || it == '.' }.take(10)
 
 @Composable private fun MarginField(label: String, value: String, onValue: (String) -> Unit, modifier: Modifier = Modifier) {
-    OutlinedTextField(value, { onValue(it.filter { c -> c.isDigit() || c == '.' }.take(5)) }, label = { Text(label) }, singleLine = true, modifier = modifier)
+    OutlinedTextField(value, { onValue(it.filter { c -> c.isDigit() || c == '.' }.take(5)) }, label = { Text(label) }, singleLine = true, modifier = modifier, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+}
+
+@Composable private fun LabeledCheckbox(checked: Boolean, onCheckedChange: (Boolean) -> Unit, label: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .toggleable(value = checked, role = Role.Checkbox, onValueChange = onCheckedChange),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Checkbox(checked = checked, onCheckedChange = null)
+        Text(label, modifier = Modifier.weight(1f))
+    }
+}
+
+@Composable private fun LabeledSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit, title: String, supportingText: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.labelLarge)
+            Text(supportingText, style = MaterialTheme.typography.bodySmall)
+        }
+        Switch(checked = checked, onCheckedChange = null)
+    }
 }
 
 @Composable private fun <T> EnumChips(title: String, items: Iterable<T>, selected: T, select: (T) -> Unit, label: (T) -> String) {
@@ -668,6 +711,16 @@ private fun paperNumberInput(value: String): String = value.replace(',', '.').fi
     AlertDialog(modifier = Modifier.imePadding(), onDismissRequest = onDismiss, title = { Text("Информация о принтере") }, text = {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) { Text(text, style = MaterialTheme.typography.bodySmall); if (logs.isNotEmpty()) { HorizontalDivider(Modifier.padding(vertical = 10.dp)); Text("Журнал", style = MaterialTheme.typography.labelLarge); Text(logs.joinToString("\n"), style = MaterialTheme.typography.bodySmall) } }
     }, confirmButton = { Button(onClick = { clipboard.setText(androidx.compose.ui.text.AnnotatedString(text + "\n\n" + logs.joinToString("\n"))) }) { Text("Копировать") } }, dismissButton = { Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) { OutlinedButton(onClick = onExportText) { Text("Экспорт TXT") }; OutlinedButton(onClick = onExportJson) { Text("Экспорт JSON") }; OutlinedButton(onClick = onDismiss) { Text("Закрыть") } } })
+}
+
+@Composable private fun ErrorDialog(message: String, onDismiss: () -> Unit) {
+    AlertDialog(
+        modifier = Modifier.imePadding(),
+        onDismissRequest = onDismiss,
+        title = { Text("Не удалось выполнить действие") },
+        text = { Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) { Text(message) } },
+        confirmButton = { Button(onClick = onDismiss) { Text("Закрыть") } }
+    )
 }
 
 private fun formatBytes(bytes: Long): String = when { bytes >= 1_048_576 -> "%.1f МБ".format(bytes / 1_048_576f); bytes >= 1024 -> "%.1f КБ".format(bytes / 1024f); else -> "$bytes Б" }
