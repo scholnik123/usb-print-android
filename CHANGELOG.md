@@ -6,6 +6,21 @@ All notable public changes are documented here. This project begins its public s
 
 No changes yet.
 
+## 1.0.2 - 2026-09-02
+
+### Fixed
+
+- Kept Copy, TXT export, JSON export, and Close reachable in the diagnostics dialog on compact and large-text screens
+- Corrected responsive UI regression coverage to use real layout coordinates and indexed scrolling for virtualized printer lists
+- Allowed Android Gradle Plugin builds from the project's non-ASCII Windows workspace path
+
+### Validation
+
+- 134 JVM tests pass; Android lint passes with 0 errors and 10 dependency-version warnings; the debug APK assembles successfully
+- All seven Compose instrumentation scenarios pass on a Nothing A059 running Android 16/API 36
+- Manual real-device checks pass for startup, portrait/landscape, light/dark mode, font scale 1.0/1.5/2.0, IME, system bars, Activity recreation, document selection, settings, diagnostics, long scrolling, and test-page preview
+- Physical printing, active-job foreground notification, Cancel action, and hardware-result confirmation remain not run because no USB Host printer was connected
+
 ## 1.0.1 - 2026-09-01
 
 This release brings the completed post-1.0.0 development work into `main` and the public APK.

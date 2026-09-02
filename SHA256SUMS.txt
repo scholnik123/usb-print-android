@@ -1,1 +1,1 @@
-284385bd4bb82d3f6169b6041c739878b12d9b5a5a837d19ccfe9ead49a24a7b  USB-Print-1.0.1-debug.apk
+3465f415195e216895eeefa2eed46e113bb2384df597df80ac349a8762ade557  USB-Print-1.0.2-debug.apk

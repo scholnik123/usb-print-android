@@ -14,7 +14,7 @@ No cloud. No account. No computer. No vendor print service.
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.0-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org/)
 [![API](https://img.shields.io/badge/API-26%2B-2457A5)](app/build.gradle.kts)
 [![Jetpack Compose](https://img.shields.io/badge/UI-Jetpack%20Compose-4285F4)](https://developer.android.com/compose)
-[![Release](https://img.shields.io/badge/release-1.0.1-2457A5)](https://github.com/scholnik123/usb-print-android/releases/tag/v1.0.1)
+[![Release](https://img.shields.io/badge/release-1.0.2-2457A5)](https://github.com/scholnik123/usb-print-android/releases/tag/v1.0.2)
 [![Android CI](https://github.com/scholnik123/usb-print-android/actions/workflows/android.yml/badge.svg)](https://github.com/scholnik123/usb-print-android/actions/workflows/android.yml)
 
 > Printer compatibility depends on the protocol and command language implemented by the specific printer. Some host-based/GDI printers require a proprietary desktop driver and cannot be driven by this application.
@@ -25,7 +25,7 @@ Download the current APK from [GitHub Releases](https://github.com/scholnik123/u
 
 The published APK is debug-signed and intended for direct installation and testing. A production signing key is not included in this repository.
 
-> **Current release:** 1.0.1 includes the post-1.0.0 IPP PWG Raster path, hardware-result profiles/export, software 2-up/4-up, confirmed IPP custom-paper sizes, local job metrics/progress, and the responsive UI pass. These capabilities have deterministic test coverage but have not yet been validated on a physical printer.
+> **Current release:** 1.0.2 adds the real-device Android 16 UI validation follow-up and keeps every diagnostics action reachable on compact and large-text screens. Physical printer output remains unverified.
 
 ## Features
 
@@ -204,9 +204,9 @@ The APK is generated at `app/build/outputs/apk/debug/app-debug.apk`.
 
 ## Validation
 
-Release 1.0.1 passes 134 JVM tests covering IPP framing and capability mapping, USB discovery, PWG/PCL/PostScript invariants, IPP PWG submission, page planning, N-up, custom media, hardware-result profiles/export, bounded progress/metrics, responsive width classification, and overflow behavior. Seven Compose responsive instrumentation scenarios compile; connected execution remains not run because no device or emulator is available.
+Release 1.0.2 passes 134 JVM tests covering IPP framing and capability mapping, USB discovery, PWG/PCL/PostScript invariants, IPP PWG submission, page planning, N-up, custom media, hardware-result profiles/export, bounded progress/metrics, responsive width classification, and overflow behavior. Seven Compose responsive instrumentation scenarios also pass on a Nothing A059 running Android 16/API 36.
 
-Internal golden/invariant tests are not equivalent to external validation through CUPS, Ghostscript, or ipptool, and they are not a substitute for physical printer testing. See [VALIDATION_REPORT.md](VALIDATION_REPORT.md) and [docs/TESTING.md](docs/TESTING.md).
+Internal golden/invariant tests are not equivalent to external validation through CUPS, Ghostscript, or ipptool, and they are not a substitute for physical printer testing. See [RELEASE_NOTES_1.0.2.md](RELEASE_NOTES_1.0.2.md), [VALIDATION_REPORT.md](VALIDATION_REPORT.md), and [docs/TESTING.md](docs/TESTING.md).
 
 ## Limitations
 
@@ -215,7 +215,7 @@ Internal golden/invariant tests are not equivalent to external validation throug
 - No hardware-verified printers have been recorded for this release.
 - IPP PWG still lacks external reference-tool and physical-printer validation; Create-Job + Send-Document is not implemented.
 - PCLm, PCL XL/PCL6, URF, and vendor-specific protocols are not implemented.
-- Software N-up is limited to 1, 2, or 4 logical pages and the four composing raster backends; connected-device preview/printing validation is still not run.
+- Software N-up is limited to 1, 2, or 4 logical pages and the four composing raster backends; physical USB-printer validation is still not run.
 - Custom paper is limited to IPP Direct and IPP PWG, requires a printer-confirmed range plus writable `media-col/media-size`, and has not been validated on a physical printer.
 - Progress describes application-side bytes/pages/sheets and cannot establish physical print completion. Failed USB writes expose elapsed time but the transport API cannot report a partially accepted prefix from the failing call.
 - Job-metric history is intentionally in-memory and limited to the latest 20 jobs; it is cleared when the application process restarts.
