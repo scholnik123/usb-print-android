@@ -77,6 +77,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.tooling.preview.Preview
@@ -465,7 +466,7 @@ private fun availablePrinters(state: MainUiState): List<PrinterRef> = when (val 
         title = { Text("Выберите принтер") },
         text = {
             LazyColumn(
-                modifier = Modifier.fillMaxWidth().heightIn(max = 400.dp),
+                modifier = Modifier.fillMaxWidth().heightIn(max = 400.dp).testTag("printer_selection_list"),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(printers, key = PrinterRef::deviceKey) { printer ->
@@ -904,9 +905,30 @@ private fun paperNumberInput(value: String): String = value.replace(',', '.').fi
 
 @Composable internal fun DiagnosticsDialog(text: String, logs: List<String>, onExportText: () -> Unit, onExportJson: () -> Unit, onDismiss: () -> Unit) {
     val clipboard = LocalClipboardManager.current
-    AlertDialog(modifier = Modifier.imePadding(), onDismissRequest = onDismiss, title = { Text("Информация о принтере") }, text = {
-        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) { Text(text, style = MaterialTheme.typography.bodySmall); if (logs.isNotEmpty()) { HorizontalDivider(Modifier.padding(vertical = 10.dp)); Text("Журнал", style = MaterialTheme.typography.labelLarge); Text(logs.joinToString("\n"), style = MaterialTheme.typography.bodySmall) } }
-    }, confirmButton = { Button(onClick = { clipboard.setText(androidx.compose.ui.text.AnnotatedString(text + "\n\n" + logs.joinToString("\n"))) }) { Text("Копировать") } }, dismissButton = { Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) { OutlinedButton(onClick = onExportText) { Text("Экспорт TXT") }; OutlinedButton(onClick = onExportJson) { Text("Экспорт JSON") }; OutlinedButton(onClick = onDismiss) { Text("Закрыть") } } })
+    AlertDialog(
+        modifier = Modifier.imePadding(),
+        onDismissRequest = onDismiss,
+        title = { Text("Информация о принтере") },
+        text = {
+            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+                ResponsiveChoiceFlow {
+                    Button(onClick = { clipboard.setText(androidx.compose.ui.text.AnnotatedString(text + "\n\n" + logs.joinToString("\n"))) }) {
+                        Text("Копировать")
+                    }
+                    OutlinedButton(onClick = onExportText) { Text("Экспорт TXT") }
+                    OutlinedButton(onClick = onExportJson) { Text("Экспорт JSON") }
+                }
+                Spacer(Modifier.height(12.dp))
+                Text(text, style = MaterialTheme.typography.bodySmall)
+                if (logs.isNotEmpty()) {
+                    HorizontalDivider(Modifier.padding(vertical = 10.dp))
+                    Text("Журнал", style = MaterialTheme.typography.labelLarge)
+                    Text(logs.joinToString("\n"), style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        },
+        confirmButton = { OutlinedButton(onClick = onDismiss) { Text("Закрыть") } }
+    )
 }
 
 @Composable private fun ErrorDialog(message: String, onDismiss: () -> Unit) {

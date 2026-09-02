@@ -5,14 +5,17 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -96,9 +99,14 @@ class ResponsiveLayoutTest {
             }
         }
 
-        val document = composeRule.onNodeWithText("Документ").fetchSemanticsNode().boundsInRoot
-        val settings = composeRule.onNodeWithText("Настройки печати").fetchSemanticsNode().boundsInRoot
-        assertTrue("large text should stack actions below the document", settings.top > document.top)
+        val document = composeRule.onNodeWithText("Документ").fetchSemanticsNode().layoutInfo.coordinates.positionInRoot()
+        val settingsNode = composeRule.onNodeWithText("Настройки печати")
+        val settings = settingsNode.fetchSemanticsNode().layoutInfo.coordinates.positionInRoot()
+        assertTrue(
+            "large text should stack actions below the document: document=$document settings=$settings",
+            settings.y > document.y
+        )
+        settingsNode.performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -117,6 +125,7 @@ class ResponsiveLayoutTest {
         }
 
         val lastName = printers.last().capabilities.displayName
+        composeRule.onNodeWithTag("printer_selection_list").performScrollToIndex(printers.lastIndex)
         composeRule.onNodeWithText(lastName).performScrollTo().assertIsDisplayed().performClick()
         assertTrue(selected == printers.last().deviceKey)
     }
@@ -165,8 +174,10 @@ class ResponsiveLayoutTest {
         }
 
         composeRule.onNodeWithText("TAIL_MARKER", substring = true).assertExists()
-        composeRule.onNodeWithText("Копировать").assertExists()
-        composeRule.onNodeWithText("Закрыть").assertExists()
+        composeRule.onNodeWithText("Копировать").assertIsDisplayed()
+        composeRule.onNodeWithText("Экспорт TXT").assertIsDisplayed()
+        composeRule.onNodeWithText("Экспорт JSON").assertIsDisplayed()
+        composeRule.onNodeWithText("Закрыть").assertIsDisplayed()
     }
 
     @Composable
